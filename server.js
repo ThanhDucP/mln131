@@ -10,16 +10,16 @@ const TEAM_NAMES=['Nhóm 1','Nhóm 3','Nhóm 4','Nhóm 5','Nhóm 6','Nhóm 7'];
 const PLAYER_NAMES=['Người chơi 1','Người chơi 2'];
 const BASE_POINTS=[5,5,5,10,10,10,10,20,20,30];
 const SCENARIOS=[
- ['Hội nghị Diên Hồng (1284)','Bạn là một đại diện địa phương được triệu tập khi quân Nguyên chuẩn bị xâm lược Đại Việt. Triều đình cần các địa phương phối hợp chuẩn bị lương thực, quân lính và phòng thủ; nếu góp sức, địa phương bạn phải chịu thêm gánh nặng và có thể thiếu nguồn lực riêng.','Cam kết đóng góp theo khả năng và phối hợp kế hoạch phòng thủ chung','Giấu bớt lương thực, quân lực để giữ an toàn và lợi ích cho địa phương mình'],
- ['Trước cuộc kháng chiến chống Nguyên lần hai (1285)','Bạn là một tướng địa phương biết một tuyến đường quân sự quan trọng. Đồng minh cần thông tin để bảo vệ dân và quân, nhưng tiết lộ cũng khiến gia đình, quê nhà của bạn đối mặt nguy hiểm.','Chia sẻ thông tin chính xác với lực lượng kháng chiến và cùng tìm cách bảo vệ dân','Giữ kín hoặc bán thông tin để đổi lấy sự an toàn cho mình'],
- ['Trận Bạch Đằng (1288)','Bạn là người dân địa phương thông thạo thủy triều, được lực lượng nhà Trần nhờ hỗ trợ kế hoạch trên sông. Việc phối hợp có thể giúp đánh bại đối phương nhưng nếu thất bại, làng bạn sẽ bị trả đũa.','Phối hợp dẫn đường, giữ bí mật kế hoạch và hỗ trợ sơ tán dân','Tiết lộ kế hoạch cho đối phương để tránh bị liên lụy'],
- ['Khởi nghĩa Lam Sơn (1418–1427)','Bạn là người quản lý kho lương ở vùng nghĩa quân hoạt động. Dân trong vùng cũng đang thiếu ăn; nghĩa quân cần lương thực để tiếp tục chiến đấu, còn bạn phải bảo đảm gia đình và làng mình sống sót.','Công khai lượng lương còn lại và cùng phân phối phần có thể chia sẻ','Giấu kho lương, chỉ ưu tiên người thân và mặc kệ lực lượng phối hợp'],
- ['Cuộc vây hãm thành Đông Quan (1426–1427)','Bạn là người đưa tin có thể giúp các cánh quân Lam Sơn phối hợp. Đối phương hứa thưởng lớn nếu bạn cung cấp đường đi và kế hoạch; từ chối đồng nghĩa bạn bỏ lỡ cơ hội đổi đời.','Giữ lời cam kết, chuyển tin chính xác để các cánh quân phối hợp','Nhận thưởng và tiết lộ kế hoạch của đồng minh'],
- ['Chiến dịch Ngọc Hồi–Đống Đa (1789)','Bạn là người dân được huy động hỗ trợ đoàn quân của Quang Trung tiến ra Bắc. Gia đình bạn cần nhân lực và lương thực, nhưng chiến dịch cần đường đi, hậu cần và sự hỗ trợ của địa phương trong thời gian ngắn.','Thống nhất mức đóng góp khả thi và hỗ trợ hậu cần theo kế hoạch chung','Tự ý giữ nguồn lực hoặc báo đường hành quân cho đối phương để tránh thiệt hại riêng'],
- ['Nạn đói năm 1945','Bạn là người quản lý một kho thóc ở miền Bắc Việt Nam trong lúc nạn đói lan rộng. Kho thóc cần được bảo toàn, nhưng nhiều gia đình quanh bạn đang thiếu ăn; việc chia sẻ có rủi ro khiến kho cạn trước khi nguồn tiếp tế đến.','Kiểm kê minh bạch và phối hợp phân phối phần lương thực có thể cứu trợ','Tích trữ hoặc tuồn thóc ra ngoài để bảo vệ lợi ích của nhóm mình'],
- ['Cách mạng Tháng Tám năm 1945','Bạn là một liên lạc viên trong mạng lưới vận động giành chính quyền ở địa phương. Các nhóm cần thống nhất thời điểm và thông tin; nếu hành động thiếu phối hợp, người dân có thể gặp nguy hiểm.','Chia sẻ thông tin đã xác minh và phối hợp hành động với các nhóm khác','Giữ thông tin cho riêng nhóm mình để giành vị thế và quyền lợi sau biến động'],
- ['Hội nghị Fontainebleau và tình hình Việt–Pháp năm 1946','Bạn là thành viên một đoàn đàm phán hư cấu đang cân nhắc thỏa thuận nhằm tránh xung đột. Thỏa hiệp có thể giữ hòa bình trước mắt nhưng cũng có nguy cơ bị lợi dụng; phá vỡ cam kết có thể bảo vệ lợi ích ngắn hạn nhưng làm mất lòng tin.','Tuân thủ điều khoản đã thống nhất, đồng thời ghi nhận vi phạm và yêu cầu cơ chế kiểm chứng','Âm thầm phá cam kết để tạo lợi thế riêng, dù có thể khiến đối tác mất lòng tin'],
- ['Hiệp định Sơ bộ Việt–Pháp (6/3/1946)','Bạn là một cán bộ địa phương hư cấu được giao chuẩn bị thực hiện chỉ thị trong bối cảnh Việt Nam tìm cách tránh xung đột khi lực lượng Pháp trở lại miền Bắc. Thỏa thuận mở ra thời gian thương lượng nhưng lòng tin mong manh; địa phương bạn lo rằng hợp tác sẽ khiến mình chịu rủi ro nếu bên kia không giữ cam kết.','Phối hợp thực hiện phần cam kết, đồng thời theo dõi và báo cáo vi phạm bằng chứng cứ','Tự ý phá thỏa thuận hoặc cung cấp thông tin sai để giành lợi thế trước mắt, dù có thể làm suy giảm lòng tin']
+ ['Ngân sách chống ngập','Khu dân cư thường ngập sau mưa. Hội đồng cần chọn cách dùng ngân sách hạn chế.','Công khai tiêu chí, ưu tiên điểm ngập nặng và giám sát chi tiêu','Dồn ngân sách cho khu vực có lợi cho nhóm mình'],
+ ['Phân loại rác','Phường triển khai phân loại rác nhưng cần người dân hợp tác.','Cùng thực hiện phân loại và góp ý cách thu gom khả thi','Bỏ qua quy định vì nghĩ phần mình không ảnh hưởng'],
+ ['Hỗ trợ người thất nghiệp','Quỹ hỗ trợ có hạn, nhiều hộ đang gặp khó khăn.','Công khai tiêu chí và phân bổ theo mức độ cần thiết','Ưu tiên người quen dù hoàn cảnh ít khó khăn hơn'],
+ ['Minh bạch ngân sách','Người dân muốn biết khoản thu chi của địa phương.','Công khai số liệu dễ hiểu và tạo kênh giám sát','Giữ thông tin khó tiếp cận để tránh bị chất vấn'],
+ ['Phòng chống dịch','Địa phương cần phối hợp khi xuất hiện nguy cơ dịch bệnh.','Chia sẻ thông tin chính xác và tuân thủ hướng dẫn chung','Che giấu thông tin bất lợi cho bản thân'],
+ ['An toàn giao thông trường học','Khu vực cổng trường thường ùn tắc và nguy hiểm.','Cùng thống nhất phương án phân luồng, ưu tiên trẻ em','Chỉ yêu cầu xử lý khi ảnh hưởng trực tiếp đến mình'],
+ ['Dịch vụ công trực tuyến','Một số người dân lớn tuổi khó sử dụng dịch vụ trực tuyến.','Bố trí hướng dẫn và kênh hỗ trợ trực tiếp','Chỉ phục vụ người đã biết sử dụng ứng dụng'],
+ ['Ứng phó thiên tai','Mưa bão gây thiệt hại, nguồn lực cứu trợ có hạn.','Công khai danh sách hỗ trợ và ưu tiên hộ dễ tổn thương','Giữ phần cứu trợ cho nhóm quen biết'],
+ ['Giám sát bữa ăn học đường','Phụ huynh lo ngại chất lượng bữa ăn tại trường.','Tổ chức giám sát minh bạch, tiếp nhận phản ánh có căn cứ','Bỏ qua phản ánh để tránh phiền phức'],
+ ['Không gian công cộng','Khu phố cần cải tạo một khoảng đất thành không gian chung.','Lấy ý kiến cư dân và chọn phương án nhiều người cùng sử dụng','Chiếm dụng không gian cho lợi ích riêng']
 ];
 const rooms=new Map();
 function code(){let c;do{c=crypto.randomBytes(3).toString('hex').toUpperCase()}while(rooms.has(c));return c}
@@ -32,7 +32,7 @@ function pairsFor(round){
 }
 function pub(room,viewerTeamId=null){
  return {code:room.code,mode:room.mode,hostConnected:room.hostConnected,started:room.started,round:room.round,scenarios:SCENARIOS.length,basePoints:BASE_POINTS[room.round]||0,scenario:SCENARIOS[room.round]||null,
-  teams:room.teams.map(t=>({id:t.id,name:t.name,connected:!!t.socketId,score:t.score,joined:!!t.socketId})),
+  teams:room.teams.map(t=>({id:t.id,name:t.name,connected:!!t.socketId,score:t.score,joined:!!t.socketId,history:t.history||[]})),
   pairs:room.pairs.map(p=>({id:p.id,teams:p.teams,choices:p.done?p.choices:(viewerTeamId!==null&&p.choices[viewerTeamId]?{[viewerTeamId]:p.choices[viewerTeamId]}:{}),submittedCount:Object.keys(p.choices).length,done:p.done,points:p.points})),finished:room.finished};
 }
 function emit(room){
@@ -49,7 +49,7 @@ io.on('connection',socket=>{
   const mode=payload.mode==='duo'?'duo':'groups';
   const names=mode==='duo'?PLAYER_NAMES:TEAM_NAMES;
   const c=code(),room={code:c,mode,hostId:socket.id,hostConnected:true,started:false,round:0,finished:false,
-   teams:names.map((name,id)=>({id,name,score:0,socketId:null})),pairs:[]};
+   teams:names.map((name,id)=>({id,name,score:0,socketId:null,history:[]})),pairs:[]};
   rooms.set(c,room);socket.join(c);makePairs(room);
   cb&&cb({ok:true,code:c,state:pub(room)});emit(room);
  });
@@ -92,7 +92,18 @@ io.on('connection',socket=>{
    else if(ca==='self'&&cbx==='common'){pair.points[a]=base*2;pair.points[b]=0}
    else if(ca==='common'&&cbx==='self'){pair.points[a]=0;pair.points[b]=base*2}
    else {pair.points[a]=0;pair.points[b]=0}
-   pair.teams.forEach(id=>room.teams[id].score+=pair.points[id]);pair.done=true;
+   pair.teams.forEach(id=>{
+    room.teams[id].score+=pair.points[id];
+    const opponentId=pair.teams.find(otherId=>otherId!==id);
+    room.teams[id].history.push({
+     round:room.round+1,
+     scenario:SCENARIOS[room.round][0],
+     choice:pair.choices[id],
+     opponent:room.teams[opponentId].name,
+     points:pair.points[id]
+    });
+   });
+   pair.done=true;
   }
   cb&&cb({ok:true});emit(room);
  });
