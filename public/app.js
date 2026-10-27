@@ -5,25 +5,14 @@ function notice(s){$('notice').textContent=s||''}
 function names(st=state){return st?.players?.map(p=>p.name)||[]}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function enterGame(r,st){role=r;roomCode=st.code;state=st;$('home').classList.add('hidden');$('game').classList.remove('hidden');$('playerView').classList.add('hidden');$('hostControls').classList.toggle('hidden',role!=='host');$('roleTag').textContent=role==='host'?'QUẢN TRÒ':'ĐANG CHƠI: '+(names(st)[playerId]||'Người chơi');$('gameTitle').textContent='Phòng '+roomCode;render(st)}
-function loadRoom(){
- const code=$('roomCode').value.trim().toUpperCase();if(!code)return notice('Nhập mã phòng trước.');
- socket.emit('roomInfo',{code},res=>{
-  if(!res?.ok)return notice(res?.error||'Không tải được danh sách.');
-  if(res.started)return notice('Ván chơi đã bắt đầu, không thể tham gia thêm.');
-  if(res.finished)return notice('Ván chơi đã kết thúc.');
-  $('playerName').innerHTML='<option value="">Chọn người chơi</option>'+res.players.map(p=>'<option value="'+esc(p.name)+'" '+(p.connected?'disabled':'')+'>'+esc(p.name)+(p.connected?' (đã có người)':'')+'</option>').join('');
-  notice('Phòng '+code+' · '+res.players.length+' vị trí người chơi. Chọn vị trí chưa có người.');
- });
-}
 $('create').onclick=()=>{
  const playerCount=Number($('playerCount').value);
  socket.emit('createRoom',{playerCount},res=>{if(!res?.ok)return notice(res?.error||'Không tạo được phòng.');$('hostCodeWrap').classList.remove('hidden');$('hostCode').textContent=res.code;enterGame('host',res.state)});
 };
-$('loadRoom').onclick=loadRoom;
-$('roomCode').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase();$('playerName').innerHTML='<option value="">Nhập mã rồi tải danh sách</option>'});
+$('roomCode').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase()});
 $('join').onclick=()=>{
- notice('');const code=$('roomCode').value.trim().toUpperCase(),name=$('playerName').value;
- if(!code)return notice('Nhập mã phòng trước.');if(!name)return notice('Tải danh sách rồi chọn người chơi.');
+ notice('');const code=$('roomCode').value.trim().toUpperCase(),name=$('playerName').value.trim();
+ if(!code)return notice('Nhập mã phòng trước.');if(!name)return notice('Nhập tên người chơi.');
  socket.emit('joinTeam',{code,name},res=>{if(!res?.ok)return notice(res?.error||'Không thể vào phòng.');playerId=res.playerId;enterGame('player',res.state);notice('')});
 };
 $('start').onclick=()=>socket.emit('startGame',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể bắt đầu')});
