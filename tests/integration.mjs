@@ -41,7 +41,7 @@ try {
     await page.locator('#roomCode').fill(code);
     await page.locator('#playerName').fill(name);
     await page.locator('#join').click();
-    await page.locator('#playerView').waitFor({ state: 'visible' });
+    await page.locator('#game').waitFor({ state: 'visible' });
     players.push(page);
   }
 
