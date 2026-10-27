@@ -27,14 +27,15 @@ function makePairs(room){
  room.byePlayerId=shuffled.length%2?shuffled[shuffled.length-1]:null;
 }
 function cooperationRate(player){
- const history=player.history||[];
- return history.length?history.filter(h=>h.choice==='common').length/history.length:0;
+ const choices=(player.history||[]).filter(h=>h.choice==='common'||h.choice==='self');
+ return choices.length?choices.filter(h=>h.choice==='common').length/choices.length:0;
 }
 function isGood(player){return cooperationRate(player)>=0.7}
 function rankingData(room){
  return room.players.map(p=>{
-  const betrayalsAgainstGood=(p.history||[]).filter(h=>h.choice==='self'&&room.players.some(op=>op.id===h.opponentId&&isGood(op))).length;
-  return {...p,cooperationRate:cooperationRate(p),isGood:isGood(p),betrayalsAgainstGood};
+  const history=p.history||[];
+  const betrayalsAgainstCooperators=history.filter(h=>h.choice==='self'&&h.opponentChoice==='common').length;
+  return {...p,cooperationRate:cooperationRate(p),isGood:isGood(p),betrayalsAgainstCooperators};
  });
 }
 function pub(room,viewerId=null){
