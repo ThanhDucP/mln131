@@ -71,7 +71,7 @@ function pub(room, viewerId = null, isHost = false) {
     code: room.code, started: room.started, finished: room.finished,
     finalRankingPublished: !!room.finalRankingPublished,
     gamesPerPlayer: GAMES_PER_PLAYER, roundSeconds: ROUND_SECONDS,
-    completedMatches: room.completedMatches, totalMatches: room.matches.length,
+    completedMatches: room.completedMatches, totalMatches: room.players.length * GAMES_PER_PLAYER / 2,
     players: playerPayload,
     activeMatches: isHost ? activeMatches.map(m => matchForViewer(m, null, true)) : [],
     activeMatch: ownMatch ? matchForViewer(ownMatch, viewerId, false) : null,
