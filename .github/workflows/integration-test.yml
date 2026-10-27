@@ -1,0 +1,50 @@
+name: Deployed website integration test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/**'
+      - '.github/workflows/integration-test.yml'
+      - 'server.js'
+      - 'public/**'
+      - 'package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install application and browser test dependencies
+        run: |
+          npm install
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Wait for deployed website
+        env:
+          BASE_URL: https://vi-loi-ich-chung-game.onrender.com/
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error "$BASE_URL/health"; then
+              echo
+              exit 0
+            fi
+            echo "Website not ready yet (attempt $attempt/30)"
+            sleep 10
+          done
+          echo "Deployed website did not become healthy in time"
+          exit 1
+      - name: Run multi-browser integration tests against deployed website
+        env:
+          BASE_URL: https://vi-loi-ich-chung-game.onrender.com/
+        run: node tests/integration.mjs
