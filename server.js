@@ -84,7 +84,7 @@ io.on('connection',socket=>{
   const connected=room.players.filter(p=>p.socketId&&io.sockets.sockets.has(p.socketId));
   if(connected.length<MIN_PLAYERS)return cb&&cb({ok:false,error:'Cần ít nhất 2 người chơi đã tham gia.'});
   room.players=connected;
-  room.players.forEach((p,id)=>{p.id=id;p.name='Người chơi '+(id+1)});
+  room.players.forEach((p,id)=>{p.id=id;p.name='Người chơi '+(id+1);const playerSocket=io.sockets.sockets.get(p.socketId);if(playerSocket)playerSocket.data.playerId=id});
   room.started=true;room.round=0;makePairs(room);emit(room);cb&&cb({ok:true});
  });
  socket.on('publishFinalRanking',({code}={},cb)=>{
