@@ -30,12 +30,16 @@ function pairsFor(round){
  if(round>=5)base.forEach(p=>p.reverse());
  return base;
 }
-function pub(room){
+function pub(room,viewerTeamId=null){
  return {code:room.code,mode:room.mode,hostConnected:room.hostConnected,started:room.started,round:room.round,scenarios:SCENARIOS.length,basePoints:BASE_POINTS[room.round]||0,scenario:SCENARIOS[room.round]||null,
   teams:room.teams.map(t=>({id:t.id,name:t.name,connected:!!t.socketId,score:t.score,joined:!!t.socketId})),
-  pairs:room.pairs.map(p=>({id:p.id,teams:p.teams,choices:p.choices,done:p.done,points:p.points})),finished:room.finished};
+  pairs:room.pairs.map(p=>({id:p.id,teams:p.teams,choices:p.done?p.choices:(viewerTeamId!==null&&p.choices[viewerTeamId]?{[viewerTeamId]:p.choices[viewerTeamId]}:{}),submittedCount:Object.keys(p.choices).length,done:p.done,points:p.points})),finished:room.finished};
 }
-function emit(room){io.to(room.code).emit('state',pub(room))}
+function emit(room){
+ const host=io.sockets.sockets.get(room.hostId);
+ if(host)host.emit('state',pub(room));
+ room.teams.forEach(t=>{const participant=t.socketId&&io.sockets.sockets.get(t.socketId);if(participant)participant.emit('state',pub(room,t.id))});
+}
 function makePairs(room){
  const list=room.mode==='duo'?[[0,1]]:pairsFor(room.round);
  room.pairs=list.map((teams,id)=>({id,teams,choices:{},done:false,points:{}}));
@@ -63,7 +67,7 @@ io.on('connection',socket=>{
   if(!team)return cb&&cb({ok:false,error:'Tên người chơi/nhóm không hợp lệ. Hãy tải lại danh sách từ mã phòng.'});
   if(team.socketId&&io.sockets.sockets.has(team.socketId))return cb&&cb({ok:false,error:'Vị trí này đã đăng nhập trên thiết bị khác.'});
   team.socketId=socket.id;socket.data.roomCode=room.code;socket.data.teamId=team.id;socket.join(room.code);
-  cb&&cb({ok:true,state:pub(room),teamId:team.id});emit(room);
+  cb&&cb({ok:true,state:pub(room,team.id),teamId:team.id});emit(room);
  });
  socket.on('startGame',({code}={},cb)=>{
   const room=rooms.get(String(code||'').toUpperCase());
