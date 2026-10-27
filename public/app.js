@@ -86,7 +86,7 @@ function render(st){
   const result=p.done
    ?'<div class="status">Kết quả: '+esc(teamNames[a])+' +'+p.points[a]+' điểm · '+esc(teamNames[b])+' +'+p.points[b]+' điểm</div>'
    :'<div class="status">'+p.submittedCount+'/2 đã chốt lựa chọn · chưa công khai đáp án</div>';
-  const summary=p.done?'<p class="muted">Lựa chọn: '+(p.choices[a]==='common'?'Hợp tác':'Lợi ích cá nhân')+' / '+(p.choices[b]==='common'?'Hợp tác':'Lợi ích cá nhân')+'</p>':'';
+  const summary=p.done?'<p class="muted">Lựa chọn: '+(p.choices[a]==='common'?'Hợp tác':'Phản bội')+' / '+(p.choices[b]==='common'?'Hợp tác':'Phản bội')+'</p>':'';
   return '<div class="pair"><div class="tag">'+(duo?'ĐỐI KHÁNG':'CẶP '+(p.id+1))+'</div><div class="versus"><span>'+esc(teamNames[a])+'</span><b>VS</b><span>'+esc(teamNames[b])+'</span></div>'+result+summary+'</div>';
  }).join('');
 }
@@ -111,13 +111,13 @@ function renderPlayerView(st){
  }
  const opponentId=pair.teams.find(id=>id!==teamId),opponent=teamNames[opponentId],myChoice=pair.choices[teamId],locked=!!myChoice&&!pair.done;
  if(pair.done){
-  $('playerStatus').innerHTML='<div class="player-result"><strong>Lượt đã hoàn tất.</strong><br>'+esc(teamNames[pair.teams[0]])+': '+(pair.choices[pair.teams[0]]==='common'?'Hợp tác':'Lợi ích cá nhân')+' · +'+pair.points[pair.teams[0]]+' điểm<br>'+esc(teamNames[pair.teams[1]])+': '+(pair.choices[pair.teams[1]]==='common'?'Hợp tác':'Lợi ích cá nhân')+' · +'+pair.points[pair.teams[1]]+' điểm</div>';
+  $('playerStatus').innerHTML='<div class="player-result"><strong>Lượt đã hoàn tất.</strong><br>'+esc(teamNames[pair.teams[0]])+': '+(pair.choices[pair.teams[0]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[0]]+' điểm<br>'+esc(teamNames[pair.teams[1]])+': '+(pair.choices[pair.teams[1]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[1]]+' điểm</div>';
  }else if(locked){
   $('playerStatus').textContent='Bạn đã chốt lựa chọn. Đang chờ '+opponent+' hoàn tất lựa chọn. Lựa chọn của đối thủ vẫn được giữ kín.';
  }else{
   $('playerStatus').textContent='Bạn đang đối đầu với '+opponent+'. Hãy cân nhắc tình huống và chọn một phương án. Lựa chọn của hai bên được giữ kín cho đến khi cả hai chốt.';
  }
- $('playerChoices').innerHTML='<button class="player-choice '+(myChoice==='common'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="common">Hợp tác vì lợi ích chung<small>'+esc(st.scenario[2])+'<br><br>Nhận '+st.basePoints+' điểm nếu cả hai cùng hợp tác.</small></button><button class="player-choice self '+(myChoice==='self'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="self">Ưu tiên lợi ích cá nhân<small>'+esc(st.scenario[3])+'<br><br>Nhận '+(st.basePoints*2)+' điểm nếu đối thủ hợp tác; nhận 0 điểm nếu cả hai chọn phương án này.</small></button>';
+ $('playerChoices').innerHTML='<button class="player-choice '+(myChoice==='common'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="common">Hợp tác với đồng minh<small>'+esc(st.scenario[2])+'<br><br>Nhận '+st.basePoints+' điểm nếu cả hai cùng hợp tác.</small></button><button class="player-choice self '+(myChoice==='self'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="self">Phản bội để giữ lợi ích riêng<small>'+esc(st.scenario[3])+'<br><br>Nhận '+(st.basePoints*2)+' điểm nếu đối thủ hợp tác; nhận 0 điểm nếu cả hai chọn phương án này.</small></button>';
  document.querySelectorAll('[data-player-choice]').forEach(btn=>btn.onclick=()=>{
   btn.disabled=true;$('playerStatus').textContent='Đang ghi nhận lựa chọn của bạn…';
   socket.emit('choose',{pairId:pair.id,choice:btn.dataset.playerChoice},res=>{
