@@ -11,6 +11,7 @@ app.get('/health', (req, res) => res.json({ ok: true, app: 'Vi Loi Ich Chung' })
 
 const GAMES_PER_PLAYER = 20;
 const ROUND_SECONDS = 30;
+const RECONNECT_GRACE_SECONDS = 30;
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 50;
 const BASE_POINTS = [5, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 10, 10, 20, 20, 20, 20, 30, 30];
@@ -87,114 +88,35 @@ function emit(room) {
   });
 }
 function createSchedule(room) {
-  const players = room.players;
-  const n = players.length;
-  const personalPoints = players.map(() => shuffle(BASE_POINTS));
-  const matches = [];
-  let id = 0;
-  // A balanced 20-degree schedule: each player contributes 10 outgoing pairings
-  // and receives 10 incoming pairings, so every player is scheduled exactly 20 times.
-  for (let i = 0; i < n; i++) {
-    for (let k = 0; k < 10; k++) {
-      const offset = (k % (n - 1)) + 1;
-      const j = (i + offset) % n;
-      matches.push({
-        id: id++, players: [i, j], choices: {}, points: {}, done: false,
-        basePoints: {}, gameNumbers: {}, endsAt: null, timer: null
-      });
-    }
-  }
-  const appearances = Array(n).fill(0);
-  matches.forEach(match => {
-    match.players.forEach(playerId => {
-      const gameNumber = ++appearances[playerId];
-      match.gameNumbers[playerId] = gameNumber;
-      match.basePoints[playerId] = personalPoints[playerId][gameNumber - 1];
-    });
-  });
-  // Shuffle execution order without changing each player's preassigned game number/point value.
-  room.matches = shuffle(matches);
-  room.matchQueue = [...room.matches];
-  room.activeMatches = new Map();
-  room.busyPlayers = new Set();
-  room.completedMatches = 0;
+ room.matches=[];room.matchQueue=[];room.activeMatches=new Map();room.busyPlayers=new Set();room.completedMatches=0;room.nextMatchId=0;
+ room.players.forEach(p=>{p.remainingPoints=shuffle(BASE_POINTS);p.gamesPlayed=0;p.forfeited=false;p.disconnectTimer=null;p.history=[];});
 }
-function settleMatch(room, match, timedOut = false) {
-  if (match.done) return;
-  if (match.timer) clearTimeout(match.timer);
-  match.timer = null;
-  const [a, b] = match.players;
-  const ca = match.choices[a];
-  const cb = match.choices[b];
-  const complete = (ca === 'common' || ca === 'self') && (cb === 'common' || cb === 'self');
-  match.points[a] = 0;
-  match.points[b] = 0;
-  if (complete) {
-    const baseA = match.basePoints[a];
-    const baseB = match.basePoints[b];
-    if (ca === 'common' && cb === 'common') {
-      match.points[a] = baseA;
-      match.points[b] = baseB;
-    } else if (ca === 'self' && cb === 'common') {
-      match.points[a] = baseA * 2;
-    } else if (ca === 'common' && cb === 'self') {
-      match.points[b] = baseB * 2;
-    }
-  }
-  match.players.forEach(playerId => {
-    const player = room.players.find(p => p.id === playerId);
-    const opponentId = match.players.find(id => id !== playerId);
-    const choice = match.choices[playerId] || 'timeout';
-    const opponentChoice = match.choices[opponentId] || 'timeout';
-    player.score += match.points[playerId];
-    player.gamesPlayed += 1;
-    player.history.push({
-      round: player.gamesPlayed,
-      gameNumber: match.gameNumbers[playerId],
-      matchId: match.id,
-      opponentId,
-      opponent: room.players.find(p => p.id === opponentId).name,
-      choice, opponentChoice,
-      points: match.points[playerId],
-      basePoints: match.basePoints[playerId],
-      timedOut: timedOut || !complete
-    });
-  });
-  match.done = true;
-  match.endsAt = null;
-  room.activeMatches.delete(match.id);
-  match.players.forEach(id => room.busyPlayers.delete(id));
-  room.completedMatches += 1;
+function findCommonPoint(a,b){return a.remainingPoints.find(x=>b.remainingPoints.includes(x));}
+function settleMatch(room,m,timedOut=false,forfeitId=null){
+ if(m.done)return;if(m.timer)clearTimeout(m.timer);m.timer=null;
+ const [a,b]=m.players,ca=m.choices[a],cb=m.choices[b],complete=['common','self'].includes(ca)&&['common','self'].includes(cb);
+ m.points[a]=0;m.points[b]=0;
+ if(forfeitId!==null){const survivor=m.players.find(id=>id!==forfeitId);if(!room.players.find(p=>p.id===survivor)?.forfeited)m.points[survivor]=m.basePoints[survivor];m.choices[forfeitId]='forfeit';}
+ else if(complete){if(ca==='common'&&cb==='common'){m.points[a]=m.basePoints[a];m.points[b]=m.basePoints[b];}else if(ca==='self'&&cb==='common')m.points[a]=2*m.basePoints[a];else if(ca==='common'&&cb==='self')m.points[b]=2*m.basePoints[b];}
+ m.players.forEach(id=>{const p=room.players.find(x=>x.id===id);if(!p)return;if(p.disconnectTimer){clearTimeout(p.disconnectTimer);p.disconnectTimer=null;}const oid=m.players.find(x=>x!==id),op=room.players.find(x=>x.id===oid);p.score+=m.points[id]||0;p.gamesPlayed++;p.history.push({round:p.gamesPlayed,gameNumber:p.gamesPlayed,matchId:m.id,opponentId:oid,opponent:op?.name||'Người chơi đã rời',choice:m.choices[id]||'timeout',opponentChoice:m.choices[oid]||'timeout',points:m.points[id]||0,basePoints:m.basePoints[id],timedOut:timedOut||!complete,forfeited:forfeitId===id});});
+ if(forfeitId!==null){const p=room.players.find(x=>x.id===forfeitId);if(p){p.forfeited=true;p.remainingPoints=[];}}
+ m.done=true;m.endsAt=null;room.activeMatches.delete(m.id);m.players.forEach(id=>room.busyPlayers.delete(id));room.completedMatches++;
 }
-function startAvailableMatches(room) {
-  if (!room.started || room.finished) return;
-  let startedAny;
-  do {
-    startedAny = false;
-    for (let i = 0; i < room.matchQueue.length; i++) {
-      const match = room.matchQueue[i];
-      if (match.players.some(id => room.busyPlayers.has(id))) continue;
-      room.matchQueue.splice(i, 1);
-      i--;
-      match.endsAt = Date.now() + ROUND_SECONDS * 1000;
-      room.activeMatches.set(match.id, match);
-      match.players.forEach(id => room.busyPlayers.add(id));
-      match.timer = setTimeout(() => {
-        if (match.done || !room.started || room.finished) return;
-        settleMatch(room, match, true);
-        startAvailableMatches(room);
-        emit(room);
-        finishIfComplete(room);
-      }, ROUND_SECONDS * 1000);
-      startedAny = true;
-    }
-  } while (startedAny);
+function startAvailableMatches(room){
+ if(!room.started||room.finished)return;let started;
+ do{started=false;const free=room.players.filter(p=>!p.forfeited&&p.gamesPlayed<GAMES_PER_PLAYER&&p.socketId&&io.sockets.sockets.has(p.socketId)&&!room.busyPlayers.has(p.id));
+ outer:for(let i=0;i<free.length;i++)for(let j=i+1;j<free.length;j++){const a=free[i],b=free[j],points=findCommonPoint(a,b);if(points===undefined)continue;
+ a.remainingPoints.splice(a.remainingPoints.indexOf(points),1);b.remainingPoints.splice(b.remainingPoints.indexOf(points),1);
+ const m={id:room.nextMatchId++,players:[a.id,b.id],choices:{},points:{},done:false,basePoints:{[a.id]:points,[b.id]:points},gameNumbers:{[a.id]:a.gamesPlayed+1,[b.id]:b.gamesPlayed+1},pointType:points,endsAt:Date.now()+ROUND_SECONDS*1000,timer:null,remainingMs:ROUND_SECONDS*1000};
+ room.matches.push(m);room.activeMatches.set(m.id,m);room.busyPlayers.add(a.id);room.busyPlayers.add(b.id);
+ m.timer=setTimeout(()=>{if(m.done||!room.started||room.finished)return;settleMatch(room,m,true);startAvailableMatches(room);emit(room);finishIfComplete(room);},ROUND_SECONDS*1000);started=true;break outer;
+ }}while(started);
 }
 function finishIfComplete(room) {
-  if (room.started && room.matchQueue.length === 0 && room.activeMatches.size === 0) {
+  if (room.started && room.players.every(p => p.forfeited || p.gamesPlayed >= GAMES_PER_PLAYER) && room.activeMatches.size === 0) {
     room.finished = true;
     room.players.forEach(p => {
-      if (p.gamesPlayed !== GAMES_PER_PLAYER) {
+      if (!p.forfeited && p.gamesPlayed !== GAMES_PER_PLAYER) {
         console.error('Schedule invariant failed', room.code, p.id, p.gamesPlayed);
       }
     });
@@ -239,8 +161,11 @@ io.on('connection', socket => {
     const room = rooms.get(String(rawCode || '').trim().toUpperCase());
     if (!room) return cb && cb({ ok: false, error: 'Không tìm thấy phòng. Kiểm tra mã phòng.' });
     if (room.finished) return cb && cb({ ok: false, error: 'Ván chơi đã kết thúc.' });
-    if (room.started) return cb && cb({ ok: false, error: 'Ván chơi đã bắt đầu, không thể tham gia thêm.' });
-    const playerName = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+    
+    const playerName = String(name || '').trim().replace(/\\s+/g, ' ').slice(0, 30);
+    const r = room.started ? room.players.find(p=>!p.forfeited&&!p.socketId&&p.disconnectTimer&&p.name.toLocaleLowerCase('vi')===playerName.toLocaleLowerCase('vi')) : null;
+    if(r){clearTimeout(r.disconnectTimer);r.disconnectTimer=null;r.socketId=socket.id;socket.data.roomCode=room.code;socket.data.playerId=r.id;socket.join(room.code);const m=[...room.activeMatches.values()].find(x=>x.players.includes(r.id));if(m&&m.pausedForDisconnect){m.pausedForDisconnect=false;m.endsAt=Date.now()+m.remainingMs;m.timer=setTimeout(()=>{if(m.done||room.finished)return;settleMatch(room,m,true);startAvailableMatches(room);emit(room);finishIfComplete(room);},m.remainingMs);}cb&&cb({ok:true,state:pub(room,r.id,false),playerId:r.id,reconnected:true});startAvailableMatches(room);emit(room);return;}
+    if(room.started)return cb&&cb({ok:false,error:'Ván chơi đã bắt đầu. Chỉ người mất kết nối mới có thể quay lại bằng đúng tên cũ trong 30 giây.'});
     if (!playerName) return cb && cb({ ok: false, error: 'Nhập tên người chơi.' });
     if (room.players.some(p => p.socketId && p.name.toLocaleLowerCase('vi') === playerName.toLocaleLowerCase('vi'))) {
       return cb && cb({ ok: false, error: 'Tên này đã được sử dụng trong phòng. Hãy chọn tên khác.' });
@@ -308,8 +233,8 @@ io.on('connection', socket => {
     for (const room of rooms.values()) {
       if (room.hostId === socket.id) { room.hostConnected = false; emit(room); }
       if (socket.data.roomCode === room.code && Number.isInteger(socket.data.playerId)) {
-        const p = playerBySocket(room, socket.id);
-        if (p && p.socketId === socket.id) p.socketId = null;
+        const p=playerBySocket(room,socket.id);
+        if(p&&p.socketId===socket.id){p.socketId=null;if(room.started&&!room.finished&&!p.forfeited){const m=[...room.activeMatches.values()].find(x=>x.players.includes(p.id));if(m&&!m.done){if(m.timer)clearTimeout(m.timer);m.timer=null;m.remainingMs=Math.max(1000,(m.endsAt||Date.now())-Date.now());m.endsAt=null;m.pausedForDisconnect=true;}p.disconnectTimer=setTimeout(()=>{p.disconnectTimer=null;if(p.socketId||p.forfeited||room.finished)return;const active=[...room.activeMatches.values()].find(x=>x.players.includes(p.id));if(active)settleMatch(room,active,true,p.id);else{p.forfeited=true;p.remainingPoints=[];}startAvailableMatches(room);emit(room);finishIfComplete(room);},RECONNECT_GRACE_SECONDS*1000);}}
         emit(room);
       }
     }
