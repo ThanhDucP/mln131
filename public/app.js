@@ -39,7 +39,7 @@ function render(st){
  }).join('');
  $('publishFinal').classList.toggle('hidden',role!=='host'||!st.finished||st.finalRankingPublished);
  $('start').classList.toggle('hidden',role!=='host'||st.started||st.finished);
- $('next').classList.toggle('hidden',role!=='host'||!st.started||st.finished);
+ $('next').classList.add('hidden');
  $('next').disabled=!st.pairs.every(p=>p.done);
  $('next').textContent=st.round===st.rounds-1?'Kết thúc trò chơi':'Lượt tiếp theo';
  if(role==='player'&&st.started){$('game').classList.add('hidden');$('playerView').classList.remove('hidden');renderPlayerView(st);return}
