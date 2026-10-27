@@ -71,9 +71,12 @@ io.on('connection',socket=>{
   if(!room)return cb&&cb({ok:false,error:'Không tìm thấy phòng. Kiểm tra mã phòng.'});
   if(room.finished)return cb&&cb({ok:false,error:'Ván chơi đã kết thúc.'});
   if(room.started)return cb&&cb({ok:false,error:'Ván chơi đã bắt đầu, không thể tham gia thêm.'});
-  const player=room.players.find(p=>p.name===name);
-  if(!player)return cb&&cb({ok:false,error:'Tên người chơi không hợp lệ. Hãy tải lại danh sách từ mã phòng.'});
-  if(player.socketId&&io.sockets.sockets.has(player.socketId))return cb&&cb({ok:false,error:'Vị trí này đã có người đăng nhập.'});
+  const playerName=String(name||'').trim().replace(/\\s+/g,' ').slice(0,30);
+  if(!playerName)return cb&&cb({ok:false,error:'Nhập tên người chơi.'});
+  if(room.players.some(p=>p.socketId&&p.name.toLocaleLowerCase('vi')===playerName.toLocaleLowerCase('vi')))return cb&&cb({ok:false,error:'Tên này đã được sử dụng trong phòng. Hãy chọn tên khác.'});
+  const player=room.players.find(p=>!p.socketId||!io.sockets.sockets.has(p.socketId));
+  if(!player)return cb&&cb({ok:false,error:'Phòng đã đủ người chơi.'});
+  player.name=playerName;
   player.socketId=socket.id;socket.data.roomCode=room.code;socket.data.playerId=player.id;socket.join(room.code);
   cb&&cb({ok:true,state:pub(room,player.id),playerId:player.id});emit(room);
  });
@@ -84,7 +87,7 @@ io.on('connection',socket=>{
   const connected=room.players.filter(p=>p.socketId&&io.sockets.sockets.has(p.socketId));
   if(connected.length<MIN_PLAYERS)return cb&&cb({ok:false,error:'Cần ít nhất 2 người chơi đã tham gia.'});
   room.players=connected;
-  room.players.forEach((p,id)=>{p.id=id;p.name='Người chơi '+(id+1);const playerSocket=io.sockets.sockets.get(p.socketId);if(playerSocket)playerSocket.data.playerId=id});
+  room.players.forEach((p,id)=>{p.id=id;const playerSocket=io.sockets.sockets.get(p.socketId);if(playerSocket)playerSocket.data.playerId=id});
   room.started=true;room.round=0;makePairs(room);emit(room);cb&&cb({ok:true});
  });
  socket.on('publishFinalRanking',({code}={},cb)=>{
