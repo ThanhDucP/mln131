@@ -1,140 +1,90 @@
 const socket=io();
-let role='guest',roomCode='',teamId=null,state=null,availableNames=[];
+let role='guest',roomCode='',playerId=null,state=null;
 const $=id=>document.getElementById(id);
 function notice(s){$('notice').textContent=s||''}
-function names(st=state){return st?.teams?.map(t=>t.name)||[]}
-function enterGame(r,st){
- role=r;roomCode=st.code;state=st;
- $('home').classList.add('hidden');$('game').classList.remove('hidden');$('playerView').classList.add('hidden');
- $('hostControls').classList.toggle('hidden',role!=='host');
- $('roleTag').textContent=role==='host'?'QUẢN TRÒ':('ĐANG CHƠI: '+(names(st)[teamId]||'Người chơi'));
- $('gameTitle').textContent='Phòng '+roomCode;
- render(st);
-}
+function names(st=state){return st?.players?.map(p=>p.name)||[]}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function enterGame(r,st){role=r;roomCode=st.code;state=st;$('home').classList.add('hidden');$('game').classList.remove('hidden');$('playerView').classList.add('hidden');$('hostControls').classList.toggle('hidden',role!=='host');$('roleTag').textContent=role==='host'?'QUẢN TRÒ':'ĐANG CHƠI: '+(names(st)[playerId]||'Người chơi');$('gameTitle').textContent='Phòng '+roomCode;render(st)}
 function loadRoom(){
- const code=$('roomCode').value.trim().toUpperCase();
- if(!code)return notice('Nhập mã phòng trước.');
+ const code=$('roomCode').value.trim().toUpperCase();if(!code)return notice('Nhập mã phòng trước.');
  socket.emit('roomInfo',{code},res=>{
   if(!res?.ok)return notice(res?.error||'Không tải được danh sách.');
   if(res.started)return notice('Ván chơi đã bắt đầu, không thể tham gia thêm.');
   if(res.finished)return notice('Ván chơi đã kết thúc.');
-  const select=$('teamName');
-  select.innerHTML='<option value="">Chọn vị trí tham gia</option>'+res.teams.map(t=>'<option value="'+esc(t.name)+'" '+(t.connected?'disabled':'')+'>'+esc(t.name)+(t.connected?' (đã có người)':'')+'</option>').join('');
-  availableNames=res.teams.map(t=>t.name);
-  notice('Phòng '+code+' · '+(res.mode==='duo'?'chế độ 2 người chơi':'chế độ 6 nhóm')+'. Chọn vị trí chưa có người.');
+  $('playerName').innerHTML='<option value="">Chọn người chơi</option>'+res.players.map(p=>'<option value="'+esc(p.name)+'" '+(p.connected?'disabled':'')+'>'+esc(p.name)+(p.connected?' (đã có người)':'')+'</option>').join('');
+  notice('Phòng '+code+' · '+res.players.length+' vị trí người chơi. Chọn vị trí chưa có người.');
  });
 }
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 $('create').onclick=()=>{
- const mode=$('gameMode').value;
- socket.emit('createRoom',{mode},res=>{
-  if(!res?.ok)return notice('Không tạo được phòng. Vui lòng thử lại.');
-  $('hostCodeWrap').classList.remove('hidden');$('hostCode').textContent=res.code;
-  enterGame('host',res.state);
- });
+ const playerCount=Number($('playerCount').value);
+ socket.emit('createRoom',{playerCount},res=>{if(!res?.ok)return notice(res?.error||'Không tạo được phòng.');$('hostCodeWrap').classList.remove('hidden');$('hostCode').textContent=res.code;enterGame('host',res.state)});
 };
 $('loadRoom').onclick=loadRoom;
-$('roomCode').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase();$('teamName').innerHTML='<option value="">Nhập mã rồi tải danh sách</option>';availableNames=[]});
+$('roomCode').addEventListener('input',e=>{e.target.value=e.target.value.toUpperCase();$('playerName').innerHTML='<option value="">Nhập mã rồi tải danh sách</option>'});
 $('join').onclick=()=>{
- notice('');
- const code=$('roomCode').value.trim().toUpperCase(),name=$('teamName').value;
- if(!code)return notice('Nhập mã phòng trước.');
- if(!name)return notice('Bấm “Tải danh sách”, sau đó chọn vị trí tham gia.');
- socket.emit('joinTeam',{code,name},res=>{
-  if(!res?.ok){notice(res?.error||'Không thể vào phòng.');return}
-  teamId=res.teamId;enterGame('team',res.state);notice('');
- });
+ notice('');const code=$('roomCode').value.trim().toUpperCase(),name=$('playerName').value;
+ if(!code)return notice('Nhập mã phòng trước.');if(!name)return notice('Tải danh sách rồi chọn người chơi.');
+ socket.emit('joinTeam',{code,name},res=>{if(!res?.ok)return notice(res?.error||'Không thể vào phòng.');playerId=res.playerId;enterGame('player',res.state);notice('')});
 };
 $('start').onclick=()=>socket.emit('startGame',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể bắt đầu')});
 $('next').onclick=()=>socket.emit('nextRound',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Chưa thể chuyển lượt');else notice('')});
-$('publishFinal').onclick=()=>socket.emit('publishFinalRanking',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể công bố bảng xếp hạng');else notice('')});
+$('publishFinal').onclick=()=>socket.emit('publishFinalRanking',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể công bố xếp hạng');else notice('')});
 socket.on('state',st=>{if(st.code!==roomCode)return;state=st;render(st)});
+function compareFinal(a,b){return a.betrayalsAgainstGood-b.betrayalsAgainstGood||b.score-a.score}
 function render(st){
- const teamNames=names(st),duo=st.mode==='duo';
- $('participantsTitle').textContent=duo?'2 người chơi':'6 nhóm tham gia';
- $('gameTitle').textContent='Phòng '+st.code+(duo?' · Đấu 2 người':' · 6 nhóm');
- $('roundLabel').textContent=st.finished?'Đã kết thúc':st.started?'Lượt '+(st.round+1)+' / '+st.scenarios:'Chờ bắt đầu';
- $('gameDesc').textContent=st.finished?'Đã hoàn thành 20 lượt. Lần công bố đầu xếp theo điểm; lần công bố thứ hai là bảng xếp hạng chính thức theo lòng vị tha.':st.started?'Điểm cơ sở lượt này: '+st.basePoints+'. Hai bên chọn độc lập; kết quả công khai khi cả hai đã chốt.':'Chờ người chơi tham gia, sau đó quản trò bắt đầu.';
- $('teamList').innerHTML=st.teams.map(t=>'<div class="team"><strong>'+esc(t.name)+'</strong><div class="'+(t.connected?'online':'offline')+'">'+(t.connected?'● Đã vào phòng':'○ Chưa kết nối')+'</div><div class="score">'+t.score+' điểm</div></div>').join('');
- const compareAltruism=(a,b)=>{
-  const keys=['firstMeetCooperation','withFirstCooperators','withSecondCooperators','withThirdCooperators','withFourthCooperators'];
-  for(const key of keys){const diff=(b.altruism?.[key]||0)-(a.altruism?.[key]||0);if(diff)return diff;}
-  return b.score-a.score;
- };
- const sorted=[...st.teams].sort(st.finished&&st.finalRankingPublished?compareAltruism:(a,b)=>b.score-a.score);
- const rankingTitle=st.finished?(st.finalRankingPublished?'Xếp hạng chính thức · ưu tiên hợp tác':'Lần công bố 1 · xếp theo điểm'):'Xếp hạng tạm thời · theo tổng điểm';
- const metrics=[['firstMeetCooperation','Lần gặp đầu'],['withFirstCooperators','Đối thủ từng hợp tác lần đầu'],['withSecondCooperators','Đối thủ hợp tác lần 2'],['withThirdCooperators','Đối thủ hợp tác lần 3'],['withFourthCooperators','Đối thủ hợp tác lần 4']];
- $('leaderboard').innerHTML='<p class="muted ranking-subtitle">'+rankingTitle+(st.finished&&st.finalRankingPublished?' · Tổng điểm chỉ dùng để phân định khi các tiêu chí hợp tác bằng nhau.':'')+'</p>'+sorted.map((t,i)=>'<article class="ranking-card"><div class="ranking-main"><span class="ranking-place">'+(i+1)+'</span><span class="ranking-name">'+esc(t.name)+'</span><span class="ranking-score">'+t.score+' <small>điểm</small></span></div>'+(st.finished&&st.finalRankingPublished?'<div class="ranking-metrics">'+metrics.map((m,j)=>'<div class="ranking-metric"><span>'+esc(m[1])+'</span><strong>'+((t.altruism&&t.altruism[m[0]])||0)+'</strong></div>').join('')+'</div>':'')+'</article>').join('');
+ const playerNames=names(st);
+ $('participantsTitle').textContent='Người chơi ('+st.players.length+')';
+ $('gameTitle').textContent='Phòng '+st.code+' · '+st.players.length+' người chơi';
+ $('roundLabel').textContent=st.finished?'Đã kết thúc':st.started?'Lượt '+(st.round+1)+' / '+st.rounds:'Chờ bắt đầu';
+ $('gameDesc').textContent=st.finished?'Đã hoàn thành '+st.rounds+' lượt. Xếp hạng chính thức ưu tiên số lần phản bội người tốt thấp nhất, sau đó xét điểm.':st.started?'Điểm cơ sở lượt này: '+st.basePoints+'. Ghép cặp ngẫu nhiên mỗi lượt; người lẻ sẽ nghỉ một lượt.':'Người chơi tham gia bằng mã phòng. Cần ít nhất 2 người để bắt đầu.';
+ $('teamList').innerHTML=st.players.map(p=>'<div class="team"><strong>'+esc(p.name)+'</strong><div class="'+(p.connected?'online':'offline')+'">'+(p.connected?'● Đã tham gia':'○ Chưa tham gia')+'</div><div class="score">'+p.score+' điểm</div></div>').join('');
+ const sorted=[...st.players].sort(st.finished&&st.finalRankingPublished?compareFinal:(a,b)=>b.score-a.score);
+ const title=st.finished?(st.finalRankingPublished?'Xếp hạng chính thức':'Kết quả theo điểm'):'Xếp hạng tạm thời · theo điểm';
+ $('leaderboard').innerHTML='<p class="muted ranking-subtitle">'+title+'</p>'+sorted.map((p,i)=>{
+  let rank=i+1;if(st.finished&&st.finalRankingPublished&&i>0&&compareFinal(p,sorted[i-1])===0)rank=sorted.findIndex(x=>compareFinal(x,p)===0)+1;
+  return '<article class="ranking-card"><div class="ranking-main"><span class="ranking-place">'+rank+'</span><span class="ranking-name">'+esc(p.name)+(st.finished&&st.finalRankingPublished&&p.isGood?' <span class="good-badge">NGƯỜI TỐT</span>':'')+'</span><span class="ranking-score">'+p.score+' <small>điểm</small></span></div>'+(st.finished&&st.finalRankingPublished?'<div class="ranking-metrics"><div class="ranking-metric"><span>Số lần phản bội người tốt</span><strong>'+p.betrayalsAgainstGood+'</strong></div><div class="ranking-metric"><span>Tỷ lệ hợp tác</span><strong>'+Math.round(p.cooperationRate*100)+'%</strong></div></div>':'')+'</article>'
+ }).join('');
  $('publishFinal').classList.toggle('hidden',role!=='host'||!st.finished||st.finalRankingPublished);
  $('start').classList.toggle('hidden',role!=='host'||st.started||st.finished);
  $('next').classList.toggle('hidden',role!=='host'||!st.started||st.finished);
  $('next').disabled=!st.pairs.every(p=>p.done);
- $('next').textContent=st.round===st.scenarios-1?'Kết thúc trò chơi':'Tình huống tiếp theo';
- $('publishFinal').classList.toggle('hidden',role!=='host'||!st.finished||st.finalRankingPublished);
-
- if(role==='team'&&st.started){
-  $('game').classList.add('hidden');$('playerView').classList.remove('hidden');
-  renderPlayerView(st);return;
- }
+ $('next').textContent=st.round===st.rounds-1?'Kết thúc trò chơi':'Lượt tiếp theo';
+ if(role==='player'&&st.started){$('game').classList.add('hidden');$('playerView').classList.remove('hidden');renderPlayerView(st);return}
  $('playerView').classList.add('hidden');$('game').classList.remove('hidden');
- if(!st.started){
-  $('scenarioTitle').textContent='Lịch sử đối đầu';
-  $('scenarioDesc').textContent='';
-  $('pairs').innerHTML='';$('myChoice').textContent='';$('finish').classList.add('hidden');return;
- }
- if(st.finished){
-  $('scenarioTitle').textContent='Đã hoàn thành 20 lượt';
-  $('scenarioDesc').textContent=st.finalRankingPublished?'Bảng xếp hạng chính thức đã được công bố.':'Lần công bố 1: xếp theo điểm. Quản trò có thể công bố lần 2 để hiện bảng xếp hạng lòng vị tha.';
-  $('pairs').innerHTML='';$('myChoice').textContent='';$('finish').classList.remove('hidden');return;
- }
- $('finish').classList.add('hidden');
- $('scenarioTitle').textContent='Lịch sử đối đầu';
- $('scenarioDesc').textContent='';
- $('myChoice').textContent='Quản trò: '+(duo?'chờ hai người chơi chốt lựa chọn.':'theo dõi tiến độ 3 cặp. ')+(duo?'Chỉ chuyển lượt sau khi cả hai đã chốt.':'Chỉ chuyển lượt khi cả 3 cặp hoàn tất.');
+ $('scenarioTitle').textContent=st.finished?'Đã hoàn thành '+st.rounds+' lượt':'Các cặp đấu của lượt '+(st.round+1);
+ $('scenarioDesc').textContent=st.started?'Ghép cặp ngẫu nhiên; không cần gặp đủ tất cả người chơi.':'';
+ $('myChoice').textContent=st.started?(st.byePlayerId!==null?playerNames[st.byePlayerId]+' sẽ nghỉ lượt này. ':'')+'Chỉ chuyển lượt khi tất cả cặp đấu đã chốt.':'';
  $('pairs').innerHTML=st.pairs.map(p=>{
-  const a=p.teams[0],b=p.teams[1];
-  const result=p.done
-   ?'<div class="status">Kết quả: '+esc(teamNames[a])+' +'+p.points[a]+' điểm · '+esc(teamNames[b])+' +'+p.points[b]+' điểm</div>'
-   :'<div class="status">'+p.submittedCount+'/2 đã chốt lựa chọn · chưa công khai đáp án</div>';
-  const summary=p.done?'<p class="muted">Lựa chọn: '+(p.choices[a]==='common'?'Hợp tác':'Phản bội')+' / '+(p.choices[b]==='common'?'Hợp tác':'Phản bội')+'</p>':'';
-  return '<div class="pair"><div class="tag">'+(duo?'ĐỐI KHÁNG':'CẶP '+(p.id+1))+'</div><div class="versus"><span>'+esc(teamNames[a])+'</span><b>VS</b><span>'+esc(teamNames[b])+'</span></div>'+result+summary+'</div>';
+  const a=p.players[0],b=p.players[1];
+  return '<div class="pair"><div class="tag">CẶP NGẪU NHIÊN '+(p.id+1)+'</div><div class="versus"><span>'+esc(playerNames[a])+'</span><b>VS</b><span>'+esc(playerNames[b])+'</span></div><div class="status">'+(p.done?'Kết quả: '+esc(playerNames[a])+' '+(p.choices[a]==='common'?'Hợp tác':'Phản bội')+' · '+p.points[a]+' điểm; '+esc(playerNames[b])+' '+(p.choices[b]==='common'?'Hợp tác':'Phản bội')+' · '+p.points[b]+' điểm':p.submittedCount+'/2 đã chốt · lựa chọn đang được giữ kín')+'</div></div>'
  }).join('');
+ if(st.finished)$('finish').classList.remove('hidden');else $('finish').classList.add('hidden');
 }
 function renderPlayerView(st){
- const teamNames=names(st),myTeam=st.teams.find(t=>t.id===teamId),pair=st.pairs.find(p=>p.teams.includes(teamId));
- $('playerRole').textContent=myTeam?myTeam.name.toUpperCase():'NGƯỜI CHƠI';
- $('playerProgress').style.width=(st.finished?100:((st.round+1)/st.scenarios*100))+'%';
- $('playerRound').textContent=st.finished?'ĐÃ KẾT THÚC':'LƯỢT '+(st.round+1)+' / '+st.scenarios;
- $('playerBase').textContent='Điểm cơ sở: '+(st.basePoints||0);
- $('playerScoreline').innerHTML=st.teams.filter(t=>pair?pair.teams.includes(t.id):t.id===teamId).map(t=>'<div class="player-scorebox"><span>'+esc(t.name)+'</span><strong>'+t.score+' điểm</strong></div>').join('');
+ const player=st.players.find(p=>p.id===playerId),pair=st.pairs.find(p=>p.players.includes(playerId));
+ $('playerRole').textContent=player?player.name.toUpperCase():'NGƯỜI CHƠI';
+ $('playerProgress').style.width=(st.finished?100:((st.round+1)/st.rounds*100))+'%';
+ $('playerRound').textContent=st.finished?'ĐÃ KẾT THÚC':'LƯỢT '+(st.round+1)+' / '+st.rounds;
+ $('playerBase').textContent='Điểm cơ sở: '+st.basePoints;
+ $('playerScoreline').innerHTML='<div class="player-scorebox"><span>'+esc(player.name)+'</span><strong>'+player.score+' điểm</strong></div>';
  if(st.finished){
-  $('playerQuestion').textContent='';
-  $('playerContext').textContent='';
-  $('playerStatus').innerHTML='<div class="player-result"><strong>Giữa lợi ích cá nhân và lợi ích cộng đồng</strong><p>Không ai khuyên bạn ngừng nghĩ cho bản thân hay từ bỏ quyền lợi chính đáng. Nhưng một xã hội công bằng không thể được xây dựng nếu mỗi người chỉ quan tâm đến lợi ích riêng mà bỏ qua những người xung quanh.</p><p>Chủ nghĩa xã hội hướng đến một xã hội vì nhân dân, do nhân dân làm chủ, trong đó lợi ích chính đáng của cá nhân gắn liền với lợi ích chung của cộng đồng.</p><p>Bước đầu tiên cho những thay đổi tích cực là vượt qua tư tưởng vị kỷ và biết ưu tiên lợi ích chung khi lợi ích ấy gắn với sự công bằng và hạnh phúc của mọi người.</p></div>';
-  $('playerChoices').innerHTML='';return;
+  $('playerStatus').innerHTML='<div class="player-result"><strong>Trò chơi đã kết thúc.</strong><p>Xếp hạng chính thức ưu tiên số lần phản bội người tốt thấp nhất. Người tốt là người có tỷ lệ hợp tác từ 70% trở lên. Nếu tiêu chí và điểm bằng nhau, người chơi đồng hạng.</p></div>';
+  $('playerChoices').innerHTML='';$('playerHistory').innerHTML=historyMarkup(player,st);return;
  }
- $('playerQuestion').textContent='';
- $('playerContext').textContent='';
  if(!pair){
-  $('playerStatus').textContent='Chưa xác định được cặp đấu. Vui lòng báo quản trò.';
-  $('playerChoices').innerHTML='';return;
+  $('playerStatus').innerHTML='<strong>Bạn được nghỉ lượt này.</strong><p>Số người chơi lẻ nên mỗi lượt có thể có một người nghỉ. Lượt sau sẽ ghép cặp ngẫu nhiên lại.</p>';
+  $('playerChoices').innerHTML='';$('playerHistory').innerHTML=historyMarkup(player,st);return;
  }
- const opponentId=pair.teams.find(id=>id!==teamId),opponent=teamNames[opponentId],myChoice=pair.choices[teamId],locked=!!myChoice&&!pair.done;
- const historyMarkup=()=>{const people=pair.teams.map(id=>st.teams.find(t=>t.id===id)).filter(Boolean);const first=people[0],second=people[1];const firstEntries=(first?.history||[]).filter(h=>h.opponentId===second?.id&&h.round<st.round+1).sort((x,y)=>x.round-y.round);const secondEntries=(second?.history||[]).filter(h=>h.opponentId===first?.id&&h.round<st.round+1);return '<div class="player-history"><strong>Lịch sử đối đầu</strong>'+(firstEntries.length?'<ul>'+firstEntries.map(h=>{const other=secondEntries.find(x=>x.round===h.round);return '<li>Lượt '+h.round+' (lần gặp '+h.encounter+') — '+esc(first.name)+': <strong>'+(h.choice==='common'?'Hợp tác':'Phản bội')+'</strong> ('+h.points+' điểm) · '+esc(second.name)+': <strong>'+(other?(other.choice==='common'?'Hợp tác':'Phản bội'):'Chưa có dữ liệu')+'</strong>'+(other?' ('+other.points+' điểm)':'')+'</li>'}).join('')+'</ul>':'<p>Hai người chưa có lượt gặp nhau nào trước đó.</p>')+'</div>'};
- if(pair.done){
-  $('playerStatus').innerHTML='<div class="player-result"><strong>Lượt đã hoàn tất.</strong><br>'+esc(teamNames[pair.teams[0]])+': '+(pair.choices[pair.teams[0]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[0]]+' điểm<br>'+esc(teamNames[pair.teams[1]])+': '+(pair.choices[pair.teams[1]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[1]]+' điểm</div>';
- }else if(locked){
-  $('playerStatus').textContent='Bạn đã chốt lựa chọn. Đang chờ '+opponent+' hoàn tất lựa chọn. Lựa chọn của đối thủ vẫn được giữ kín.';
- }else{
-  $('playerStatus').textContent='Bạn đang đối đầu với '+opponent+'. Hãy cân nhắc tình huống và chọn một phương án. Lựa chọn của hai bên được giữ kín cho đến khi cả hai chốt.';
- }
- $('playerStatus').innerHTML += historyMarkup();
- $('playerChoices').innerHTML='<button class="player-choice '+(myChoice==='common'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="common">Hợp tác<small>Chọn hợp tác để ưu tiên lợi ích chung. Điểm được tính theo kết quả của cả hai.</small></button><button class="player-choice self '+(myChoice==='self'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="self">Phản bội<small>Chọn lợi ích cá nhân. Điểm được tính theo lựa chọn của đối thủ.</small></button>';
- document.querySelectorAll('[data-player-choice]').forEach(btn=>btn.onclick=()=>{
-  btn.disabled=true;$('playerStatus').textContent='Đang ghi nhận lựa chọn của bạn…';
-  socket.emit('choose',{pairId:pair.id,choice:btn.dataset.playerChoice},res=>{
-   if(!res?.ok){$('playerNotice').textContent=res?.error||'Không thể gửi lựa chọn';renderPlayerView(state)}
-   else $('playerNotice').textContent='';
-  });
+ const opponentId=pair.players.find(id=>id!==playerId),opponent=st.players.find(p=>p.id===opponentId),myChoice=pair.choices[playerId],locked=!!myChoice&&!pair.done;
+ $('playerStatus').textContent=pair.done?'Lượt đã hoàn tất. '+opponent.name+': '+(pair.choices[opponentId]==='common'?'Hợp tác':'Phản bội')+' · '+pair.points[opponentId]+' điểm.':locked?'Bạn đã chốt lựa chọn. Đang chờ '+opponent.name+' chốt.':'Bạn đang đấu với '+opponent.name+'. Lựa chọn của hai bên được giữ kín đến khi cả hai chốt.';
+ $('playerChoices').innerHTML='<button class="player-choice '+(myChoice==='common'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-choice="common">Hợp tác<small>Cùng hợp tác: cả hai nhận điểm cơ sở.</small></button><button class="player-choice self '+(myChoice==='self'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-choice="self">Phản bội<small>Phản bội người hợp tác: bạn nhận gấp đôi điểm cơ sở; đối thủ nhận 0. Cả hai phản bội: cả hai nhận 0.</small></button>';
+ document.querySelectorAll('[data-choice]').forEach(btn=>btn.onclick=()=>{
+  btn.disabled=true;$('playerNotice').textContent='Đang ghi nhận lựa chọn…';
+  socket.emit('choose',{pairId:pair.id,choice:btn.dataset.choice},res=>{if(!res?.ok){$('playerNotice').textContent=res?.error||'Không thể gửi lựa chọn';renderPlayerView(state)}else $('playerNotice').textContent=''});
  });
+ $('playerHistory').innerHTML=historyMarkup(player,st);
+}
+function historyMarkup(player,st){
+ const recent=[...(player?.history||[])].sort((a,b)=>b.round-a.round).slice(0,5);
+ return '<section class="player-history"><h3>5 lần đối đầu gần nhất</h3>'+(recent.length?'<ol>'+recent.map(h=>'<li><strong>Lượt '+h.round+' · '+esc(h.opponent)+'</strong><div>Bạn: '+(h.choice==='common'?'Hợp tác':'Phản bội')+' ('+h.points+' điểm) · Đối thủ: '+(h.opponentChoice==='common'?'Hợp tác':'Phản bội')+'</div></li>').join('')+'</ol>':'<p>Chưa có lịch sử đối đầu.</p>')+'</section>';
 }
