@@ -9,6 +9,9 @@ app.get('/health',(req,res)=>res.json({ok:true,app:'Vi Loi Ich Chung'}));
 const TEAM_NAMES=['Nhóm 1','Nhóm 3','Nhóm 4','Nhóm 5','Nhóm 6','Nhóm 7'];
 const PLAYER_NAMES=['Người chơi 1','Người chơi 2'];
 const BASE_POINTS=[5,5,5,10,10,10,10,20,20,30];
+const TOTAL_ROUNDS=20;
+const pointsFor=round=>BASE_POINTS[round%BASE_POINTS.length];
+const scenarioFor=round=>SCENARIOS[round%SCENARIOS.length];
 const SCENARIOS=[
  ['Ngân sách chống ngập','Khu dân cư thường ngập sau mưa. Hội đồng cần chọn cách dùng ngân sách hạn chế.','Công khai tiêu chí, ưu tiên điểm ngập nặng và giám sát chi tiêu','Dồn ngân sách cho khu vực có lợi cho nhóm mình'],
  ['Phân loại rác','Phường triển khai phân loại rác nhưng cần người dân hợp tác.','Cùng thực hiện phân loại và góp ý cách thu gom khả thi','Bỏ qua quy định vì nghĩ phần mình không ảnh hưởng'],
@@ -27,12 +30,26 @@ function pairsFor(round){
  const arr=[0,1,2,3,4,5],fixed=arr[5],rot=arr.slice(0,5);
  for(let i=0;i<round%5;i++)rot.unshift(rot.pop());
  const base=[[fixed,rot[0]],[rot[1],rot[4]],[rot[2],rot[3]]];
- if(round>=5)base.forEach(p=>p.reverse());
+ if(Math.floor(round/5)%2===1)base.forEach(p=>p.reverse());
  return base;
 }
+function rankingMetrics(team, teams){
+ const history=team.history||[];
+ const firstChoiceByOpponent=new Map();
+ for(const opponent of teams){const first=(opponent.history||[]).find(h=>h.opponentId===team.id&&h.encounter===1);if(first)firstChoiceByOpponent.set(opponent.id,first.choice)}
+ const count=(predicate)=>history.filter(h=>h.choice==='common'&&predicate(h)).length;
+ return {
+  firstMeetCooperation:count(h=>h.encounter===1),
+  withFirstCooperators:count(h=>h.encounter>=2&&firstChoiceByOpponent.get(h.opponentId)==='common'),
+  withSecondCooperators:count(h=>h.encounter>=3&&(teams.find(t=>t.id===h.opponentId)?.history||[]).some(o=>o.opponentId===team.id&&o.encounter===2&&o.choice==='common')),
+  withThirdCooperators:count(h=>h.encounter>=4&&(teams.find(t=>t.id===h.opponentId)?.history||[]).some(o=>o.opponentId===team.id&&o.encounter===3&&o.choice==='common')),
+  withFourthCooperators:count(h=>h.encounter>=5&&(teams.find(t=>t.id===h.opponentId)?.history||[]).some(o=>o.opponentId===team.id&&o.encounter===4&&o.choice==='common'))
+ };
+}
 function pub(room,viewerTeamId=null){
- return {code:room.code,mode:room.mode,hostConnected:room.hostConnected,started:room.started,round:room.round,scenarios:SCENARIOS.length,basePoints:BASE_POINTS[room.round]||0,scenario:SCENARIOS[room.round]||null,
-  teams:room.teams.map(t=>({id:t.id,name:t.name,connected:!!t.socketId,score:t.score,joined:!!t.socketId})),
+ const ranked=room.teams.map(t=>({...t,altruism:rankingMetrics(t,room.teams)}));
+ return {code:room.code,mode:room.mode,hostConnected:room.hostConnected,started:room.started,round:room.round,scenarios:TOTAL_ROUNDS,basePoints:pointsFor(room.round),scenario:scenarioFor(room.round),finalRankingPublished:!!room.finalRankingPublished,
+  teams:ranked.map(t=>({id:t.id,name:t.name,connected:!!t.socketId,score:t.score,joined:!!t.socketId,history:t.history||[],altruism:t.altruism})),
   pairs:room.pairs.map(p=>({id:p.id,teams:p.teams,choices:p.done?p.choices:(viewerTeamId!==null&&p.choices[viewerTeamId]?{[viewerTeamId]:p.choices[viewerTeamId]}:{}),submittedCount:Object.keys(p.choices).length,done:p.done,points:p.points})),finished:room.finished};
 }
 function emit(room){
@@ -48,8 +65,8 @@ io.on('connection',socket=>{
  socket.on('createRoom',(payload={},cb)=>{
   const mode=payload.mode==='duo'?'duo':'groups';
   const names=mode==='duo'?PLAYER_NAMES:TEAM_NAMES;
-  const c=code(),room={code:c,mode,hostId:socket.id,hostConnected:true,started:false,round:0,finished:false,
-   teams:names.map((name,id)=>({id,name,score:0,socketId:null})),pairs:[]};
+  const c=code(),room={code:c,mode,hostId:socket.id,hostConnected:true,started:false,round:0,finished:false,finalRankingPublished:false,
+   teams:names.map((name,id)=>({id,name,score:0,socketId:null,history:[]})),pairs:[]};
   rooms.set(c,room);socket.join(c);makePairs(room);
   cb&&cb({ok:true,code:c,state:pub(room)});emit(room);
  });
@@ -77,6 +94,12 @@ io.on('connection',socket=>{
    return cb&&cb({ok:false,error:'Chế độ 2 người chơi cần cả Người chơi 1 và Người chơi 2 vào phòng trước.'});
   room.started=true;makePairs(room);emit(room);cb&&cb({ok:true});
  });
+ socket.on('publishFinalRanking',({code}={},cb)=>{
+  const room=rooms.get(String(code||'').toUpperCase());
+  if(!room||room.hostId!==socket.id)return cb&&cb({ok:false,error:'Chỉ quản trò mới có thể công bố bảng xếp hạng chính thức.'});
+  if(!room.finished)return cb&&cb({ok:false,error:'Chỉ có thể công bố bảng xếp hạng chính thức sau khi kết thúc trò chơi.'});
+  room.finalRankingPublished=true;emit(room);cb&&cb({ok:true});
+ });
  socket.on('choose',({pairId,choice}={},cb)=>{
   const room=rooms.get(socket.data.roomCode),teamId=socket.data.teamId;
   if(!room||!room.started||room.finished)return cb&&cb({ok:false,error:'Ván chơi chưa bắt đầu hoặc đã kết thúc.'});
@@ -86,13 +109,28 @@ io.on('connection',socket=>{
   if(pair.choices[teamId])return cb&&cb({ok:false,error:'Bạn đã chốt lựa chọn.'});
   pair.choices[teamId]=choice;
   if(pair.teams.every(id=>pair.choices[id])){
-   const [a,b]=pair.teams,ca=pair.choices[a],cbx=pair.choices[b],base=BASE_POINTS[room.round];
+   const [a,b]=pair.teams,ca=pair.choices[a],cbx=pair.choices[b],base=pointsFor(room.round);
    pair.points={};
    if(ca==='common'&&cbx==='common'){pair.points[a]=base;pair.points[b]=base}
    else if(ca==='self'&&cbx==='common'){pair.points[a]=base*2;pair.points[b]=0}
    else if(ca==='common'&&cbx==='self'){pair.points[a]=0;pair.points[b]=base*2}
    else {pair.points[a]=0;pair.points[b]=0}
-   pair.teams.forEach(id=>room.teams[id].score+=pair.points[id]);pair.done=true;
+   pair.teams.forEach(id=>{
+    room.teams[id].score+=pair.points[id];
+    const opponentId=pair.teams.find(otherId=>otherId!==id);
+    const player=room.teams[id],encounter=player.history.filter(h=>h.opponentId===opponentId).length+1;
+    player.history.push({
+     round:room.round+1,
+     encounter,
+     scenario:scenarioFor(room.round)[0],
+     choice:pair.choices[id],
+     opponent:room.teams[opponentId].name,
+     opponentId,
+     opponentChoice:pair.choices[opponentId],
+     points:pair.points[id]
+    });
+   });
+   pair.done=true;
   }
   cb&&cb({ok:true});emit(room);
  });
@@ -101,7 +139,7 @@ io.on('connection',socket=>{
   if(!room||room.hostId!==socket.id)return cb&&cb({ok:false,error:'Chỉ quản trò mới có thể chuyển lượt.'});
   if(!room.started||room.finished)return cb&&cb({ok:false,error:'Ván chơi chưa bắt đầu hoặc đã kết thúc.'});
   if(!room.pairs.every(p=>p.done))return cb&&cb({ok:false,error:room.mode==='duo'?'Hai người chơi cần chốt lựa chọn trước khi chuyển lượt.':'Chưa đủ 3 cặp hoàn tất. Chờ các nhóm chốt lựa chọn.'});
-  if(room.round+1>=SCENARIOS.length){room.finished=true;emit(room);return cb&&cb({ok:true,finished:true})}
+  if(room.round+1>=TOTAL_ROUNDS){room.finished=true;emit(room);return cb&&cb({ok:true,finished:true})}
   room.round++;makePairs(room);emit(room);cb&&cb({ok:true});
  });
  socket.on('disconnect',()=>{
