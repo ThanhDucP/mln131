@@ -7,6 +7,7 @@ app.use(express.static('public'));
 app.get('/health',(req,res)=>res.json({ok:true,app:'Vi Loi Ich Chung'}));
 
 const TOTAL_ROUNDS=20;
+const ROUND_SECONDS=30;
 const MIN_PLAYERS=2,MAX_PLAYERS=50;
 const BASE_POINTS=[5,5,5,10,10,10,10,20,20,30];
 const pointsFor=round=>BASE_POINTS[round%BASE_POINTS.length];
@@ -39,7 +40,7 @@ function rankingData(room){
 function pub(room,viewerId=null){
  const ranked=rankingData(room);
  return {
-  code:room.code,started:room.started,round:room.round,rounds:TOTAL_ROUNDS,basePoints:pointsFor(room.round),
+  code:room.code,started:room.started,round:room.round,rounds:TOTAL_ROUNDS,basePoints:pointsFor(room.round),roundEndsAt:room.roundEndsAt||null,roundSeconds:ROUND_SECONDS,
   finalRankingPublished:!!room.finalRankingPublished,finished:room.finished,byePlayerId:room.byePlayerId,
   players:ranked.map(p=>({id:p.id,name:p.name,connected:!!p.socketId,score:p.score,history:p.history||[],cooperationRate:p.cooperationRate,isGood:p.isGood,betrayalsAgainstGood:p.betrayalsAgainstGood})),
   pairs:room.pairs.map(p=>({id:p.id,players:p.players,choices:p.done?p.choices:(viewerId!==null&&p.choices[viewerId]?{[viewerId]:p.choices[viewerId]}:{}),submittedCount:Object.keys(p.choices).length,done:p.done,points:p.points})),
@@ -49,6 +50,35 @@ function emit(room){
  const host=io.sockets.sockets.get(room.hostId);
  if(host)host.emit('state',pub(room));
  room.players.forEach(p=>{const s=p.socketId&&io.sockets.sockets.get(p.socketId);if(s)s.emit('state',pub(room,p.id))});
+}
+function settlePair(room,pair){
+ if(pair.done)return;
+ const [a,b]=pair.players,ca=pair.choices[a],cbx=pair.choices[b],base=pointsFor(room.round);
+ if(!ca||!cbx){pair.points[a]=0;pair.points[b]=0}
+ else if(ca==='common'&&cbx==='common'){pair.points[a]=base;pair.points[b]=base}
+ else if(ca==='self'&&cbx==='common'){pair.points[a]=base*2;pair.points[b]=0}
+ else if(ca==='common'&&cbx==='self'){pair.points[a]=0;pair.points[b]=base*2}
+ else {pair.points[a]=0;pair.points[b]=0}
+ pair.players.forEach(id=>{
+  const player=room.players.find(p=>p.id===id),opponentId=pair.players.find(other=>other!==id);
+  player.score+=pair.points[id];
+  player.history.push({round:room.round+1,opponentId,opponent:room.players.find(p=>p.id===opponentId).name,choice:pair.choices[id]||'timeout',opponentChoice:pair.choices[opponentId]||'timeout',points:pair.points[id]});
+ });
+ pair.done=true;
+}
+function advanceRound(room){
+ if(room.timer){clearTimeout(room.timer);room.timer=null}
+ if(room.round+1>=TOTAL_ROUNDS){room.finished=true;room.roundEndsAt=null;room.byePlayerId=null;emit(room);return}
+ room.round++;makePairs(room);beginRoundTimer(room);emit(room);
+}
+function beginRoundTimer(room){
+ if(room.timer)clearTimeout(room.timer);
+ room.roundEndsAt=Date.now()+ROUND_SECONDS*1000;
+ room.timer=setTimeout(()=>{
+  if(!room.started||room.finished)return;
+  room.pairs.forEach(pair=>{if(!pair.done){pair.players.forEach(id=>{if(!pair.choices[id])pair.choices[id]='timeout'});settlePair(room,pair)}});
+  advanceRound(room);
+ },ROUND_SECONDS*1000);
 }
 function playerBySocket(room,socketId){return room.players.find(p=>p.socketId===socketId)}
 io.on('connection',socket=>{
@@ -88,7 +118,7 @@ io.on('connection',socket=>{
   if(connected.length<MIN_PLAYERS)return cb&&cb({ok:false,error:'Cần ít nhất 2 người chơi đã tham gia.'});
   room.players=connected;
   room.players.forEach((p,id)=>{p.id=id;const playerSocket=io.sockets.sockets.get(p.socketId);if(playerSocket)playerSocket.data.playerId=id});
-  room.started=true;room.round=0;makePairs(room);emit(room);cb&&cb({ok:true});
+  room.started=true;room.round=0;makePairs(room);beginRoundTimer(room);emit(room);cb&&cb({ok:true});
  });
  socket.on('publishFinalRanking',({code}={},cb)=>{
   const room=rooms.get(String(code||'').toUpperCase());
@@ -104,28 +134,15 @@ io.on('connection',socket=>{
   if(!['common','self'].includes(choice))return cb&&cb({ok:false,error:'Lựa chọn không hợp lệ.'});
   if(pair.choices[playerId])return cb&&cb({ok:false,error:'Bạn đã chốt lựa chọn.'});
   pair.choices[playerId]=choice;
-  if(pair.players.every(id=>pair.choices[id])){
-   const [a,b]=pair.players,ca=pair.choices[a],cbx=pair.choices[b],base=pointsFor(room.round);
-   if(ca==='common'&&cbx==='common'){pair.points[a]=base;pair.points[b]=base}
-   else if(ca==='self'&&cbx==='common'){pair.points[a]=base*2;pair.points[b]=0}
-   else if(ca==='common'&&cbx==='self'){pair.points[a]=0;pair.points[b]=base*2}
-   else {pair.points[a]=0;pair.points[b]=0}
-   pair.players.forEach(id=>{
-    const player=room.players.find(p=>p.id===id),opponentId=pair.players.find(other=>other!==id);
-    player.score+=pair.points[id];
-    player.history.push({round:room.round+1,opponentId,opponent:room.players.find(p=>p.id===opponentId).name,choice:pair.choices[id],opponentChoice:pair.choices[opponentId],points:pair.points[id]});
-   });
-   pair.done=true;
-  }
+  if(pair.players.every(id=>pair.choices[id])){settlePair(room,pair);if(room.pairs.every(p=>p.done)){advanceRound(room);cb&&cb({ok:true});return}}
+
   cb&&cb({ok:true});emit(room);
  });
  socket.on('nextRound',({code}={},cb)=>{
   const room=rooms.get(String(code||'').toUpperCase());
   if(!room||room.hostId!==socket.id)return cb&&cb({ok:false,error:'Chỉ quản trò mới có thể chuyển lượt.'});
   if(!room.started||room.finished)return cb&&cb({ok:false,error:'Ván chơi chưa bắt đầu hoặc đã kết thúc.'});
-  if(!room.pairs.every(p=>p.done))return cb&&cb({ok:false,error:'Chờ tất cả các cặp hoàn thành lựa chọn.'});
-  if(room.round+1>=TOTAL_ROUNDS){room.finished=true;room.byePlayerId=null;emit(room);return cb&&cb({ok:true,finished:true})}
-  room.round++;makePairs(room);emit(room);cb&&cb({ok:true});
+  return cb&&cb({ok:false,error:'Lượt chơi tự chuyển khi mọi người đã chọn hoặc hết 30 giây.'});
  });
  socket.on('disconnect',()=>{
   for(const room of rooms.values()){
