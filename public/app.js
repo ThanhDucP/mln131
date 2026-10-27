@@ -85,7 +85,7 @@ function render(st){
   const a=p.teams[0],b=p.teams[1],mine=role==='team'&&p.teams.includes(teamId),locked=!!(mine&&(p.done||p.choices[teamId])),base=st.basePoints;
   const result=p.done
    ?'<div class="status">Kết quả: '+esc(teamNames[a])+' +'+p.points[a]+' điểm · '+esc(teamNames[b])+' +'+p.points[b]+' điểm</div>'
-   :'<div class="status">'+Object.keys(p.choices).length+'/2 đã chốt lựa chọn · chưa công khai đáp án</div>';
+   :'<div class="status">'+p.submittedCount+'/2 đã chốt lựa chọn · chưa công khai đáp án</div>';
   let buttons='';
   if(mine&&!p.done){
    buttons='<button class="choice common '+(p.choices[teamId]==='common'?'selected':'')+'" '+(locked?'disabled':'')+' data-pair="'+p.id+'" data-choice="common">Hợp tác vì lợi ích chung <small>'+esc(st.scenario[2])+' · +'+base+' nếu cả hai hợp tác</small></button><button class="choice self '+(p.choices[teamId]==='self'?'selected':'')+'" '+(locked?'disabled':'')+' data-pair="'+p.id+'" data-choice="self">Ưu tiên lợi ích cá nhân <small>'+esc(st.scenario[3])+' · +'+(base*2)+' nếu đối thủ hợp tác; 0 nếu cả hai chọn phương án này</small></button>';
