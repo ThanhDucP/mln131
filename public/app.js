@@ -1,6 +1,8 @@
 const socket=io();
 let role='guest',roomCode='',playerId=null,state=null;
 const $=id=>document.getElementById(id);
+let countdownInterval=null;
+function updateCountdown(){const seconds=state?.started&&!state.finished&&state.roundEndsAt?Math.max(0,Math.ceil((state.roundEndsAt-Date.now())/1000)):null;const el=$('roundTimer');if(el)el.textContent=seconds===null?'':'Còn '+seconds+' giây';const playerEl=$('playerTimer');if(playerEl)playerEl.textContent=seconds===null?'':'Còn '+seconds+' giây';}
 function notice(s){$('notice').textContent=s||''}
 function names(st=state){return st?.players?.map(p=>p.name)||[]}
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
@@ -18,14 +20,16 @@ $('join').onclick=()=>{
 $('start').onclick=()=>socket.emit('startGame',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể bắt đầu')});
 $('next').onclick=()=>socket.emit('nextRound',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Chưa thể chuyển lượt');else notice('')});
 $('publishFinal').onclick=()=>socket.emit('publishFinalRanking',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể công bố xếp hạng');else notice('')});
-socket.on('state',st=>{if(st.code!==roomCode)return;state=st;render(st)});
+socket.on('state',st=>{if(st.code!==roomCode)return;state=st;render(st);updateCountdown()});
+if(countdownInterval)clearInterval(countdownInterval);countdownInterval=setInterval(updateCountdown,250);
 function compareFinal(a,b){return a.betrayalsAgainstGood-b.betrayalsAgainstGood||b.score-a.score}
 function render(st){
  const playerNames=names(st);
  $('participantsTitle').textContent='Người chơi ('+st.players.length+')';
  $('gameTitle').textContent='Phòng '+st.code+' · '+st.players.length+' người chơi';
  $('roundLabel').textContent=st.finished?'Đã kết thúc':st.started?'Lượt '+(st.round+1)+' / '+st.rounds:'Chờ bắt đầu';
- $('gameDesc').textContent=st.finished?'Đã hoàn thành '+st.rounds+' lượt. Xếp hạng chính thức ưu tiên số lần phản bội người tốt thấp nhất, sau đó xét điểm.':st.started?'Điểm cơ sở lượt này: '+st.basePoints+'. Ghép cặp ngẫu nhiên mỗi lượt; người lẻ sẽ nghỉ một lượt.':'Người chơi tham gia bằng mã phòng. Cần ít nhất 2 người để bắt đầu.';
+ updateCountdown();
+ $('gameDesc').textContent=st.finished?'Đã hoàn thành '+st.rounds+' lượt. Xếp hạng chính thức ưu tiên số lần phản bội người tốt thấp nhất, sau đó xét điểm.':st.started?'Điểm cơ sở lượt này: '+st.basePoints+'. Ghép cặp ngẫu nhiên; tự chuyển lượt khi tất cả đã chọn hoặc hết 30 giây.':'Người chơi tham gia bằng mã phòng. Cần ít nhất 2 người để bắt đầu.';
  $('teamList').innerHTML=st.players.map(p=>'<div class="team"><strong>'+esc(p.name)+'</strong><div class="'+(p.connected?'online':'offline')+'">'+(p.connected?'● Đã tham gia':'○ Chưa tham gia')+'</div><div class="score">'+p.score+' điểm</div></div>').join('');
  const sorted=[...st.players].sort(st.finished&&st.finalRankingPublished?compareFinal:(a,b)=>b.score-a.score);
  const title=st.finished?(st.finalRankingPublished?'Xếp hạng chính thức':'Kết quả theo điểm'):'Xếp hạng tạm thời · theo điểm';
@@ -54,6 +58,7 @@ function renderPlayerView(st){
  $('playerRole').textContent=player?player.name.toUpperCase():'NGƯỜI CHƠI';
  $('playerProgress').style.width=(st.finished?100:((st.round+1)/st.rounds*100))+'%';
  $('playerRound').textContent=st.finished?'ĐÃ KẾT THÚC':'LƯỢT '+(st.round+1)+' / '+st.rounds;
+ $('playerTimer').textContent=st.finished?'':(st.roundEndsAt?'Còn '+Math.max(0,Math.ceil((st.roundEndsAt-Date.now())/1000))+' giây':'');
  $('playerBase').textContent='Điểm cơ sở: '+st.basePoints;
  $('playerScoreline').innerHTML='<div class="player-scorebox"><span>'+esc(player.name)+'</span><strong>'+player.score+' điểm</strong></div>';
  if(st.finished){
