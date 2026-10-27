@@ -47,20 +47,28 @@ $('join').onclick=()=>{
 };
 $('start').onclick=()=>socket.emit('startGame',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể bắt đầu')});
 $('next').onclick=()=>socket.emit('nextRound',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Chưa thể chuyển lượt');else notice('')});
+$('publishFinal').onclick=()=>socket.emit('publishFinalRanking',{code:roomCode},res=>{if(!res?.ok)notice(res?.error||'Không thể công bố bảng xếp hạng');else notice('')});
 socket.on('state',st=>{if(st.code!==roomCode)return;state=st;render(st)});
 function render(st){
  const teamNames=names(st),duo=st.mode==='duo';
  $('participantsTitle').textContent=duo?'2 người chơi':'6 nhóm tham gia';
  $('gameTitle').textContent='Phòng '+st.code+(duo?' · Đấu 2 người':' · 6 nhóm');
  $('roundLabel').textContent=st.finished?'Đã kết thúc':st.started?'Tình huống '+(st.round+1)+' / '+st.scenarios:'Chờ bắt đầu';
- $('gameDesc').textContent=st.finished?'Đã hoàn thành 10 tình huống.':st.started?'Điểm cơ sở lượt này: '+st.basePoints+'. Hai bên chọn độc lập; kết quả công khai khi cả hai đã chốt.':'Chờ người chơi tham gia, sau đó quản trò bắt đầu.';
+ $('gameDesc').textContent=st.finished?'Đã hoàn thành 20 lượt. Lần công bố đầu xếp theo điểm; lần công bố thứ hai là bảng xếp hạng chính thức theo lòng vị tha.':st.started?'Điểm cơ sở lượt này: '+st.basePoints+'. Hai bên chọn độc lập; kết quả công khai khi cả hai đã chốt.':'Chờ người chơi tham gia, sau đó quản trò bắt đầu.';
  $('teamList').innerHTML=st.teams.map(t=>'<div class="team"><strong>'+esc(t.name)+'</strong><div class="'+(t.connected?'online':'offline')+'">'+(t.connected?'● Đã vào phòng':'○ Chưa kết nối')+'</div><div class="score">'+t.score+' điểm</div></div>').join('');
- const sorted=[...st.teams].sort((a,b)=>b.score-a.score);
- $('leaderboard').innerHTML=sorted.map((t,i)=>'<div class="leader"><span>'+(i+1)+'. '+esc(t.name)+'</span><strong>'+t.score+' đ</strong></div>').join('');
+ const compareAltruism=(a,b)=>{
+  const keys=['firstMeetCooperation','withFirstCooperators','withSecondCooperators','withThirdCooperators','withFourthCooperators'];
+  for(const key of keys){const diff=(b.altruism?.[key]||0)-(a.altruism?.[key]||0);if(diff)return diff;}
+  return b.score-a.score;
+ };
+ const sorted=[...st.teams].sort(st.finished&&st.finalRankingPublished?compareAltruism:(a,b)=>b.score-a.score);
+ $('leaderboard').innerHTML='<p class="muted">'+(st.finished?(st.finalRankingPublished?'BẢNG XẾP HẠNG CHÍNH THỨC · ưu tiên lòng vị tha, sau đó mới đến điểm':'LẦN CÔNG BỐ 1 · chỉ xếp theo tổng điểm'):'Xếp hạng tạm thời theo tổng điểm')+'</p>'+sorted.map((t,i)=>'<div class="leader"><span>'+(i+1)+'. '+esc(t.name)+'</span><strong>'+t.score+' đ'+(st.finished&&st.finalRankingPublished?'<small> · '+['Lần đầu: '+(t.altruism?.firstMeetCooperation||0),'Ưu tiên 2: '+(t.altruism?.withFirstCooperators||0),'Ưu tiên 3: '+(t.altruism?.withSecondCooperators||0),'Ưu tiên 4: '+(t.altruism?.withThirdCooperators||0),'Ưu tiên 5: '+(t.altruism?.withFourthCooperators||0)].join(' / ')+'</small>':'')+'</strong></div>').join('');
+ $('publishFinal').classList.toggle('hidden',role!=='host'||!st.finished||st.finalRankingPublished);
  $('start').classList.toggle('hidden',role!=='host'||st.started||st.finished);
  $('next').classList.toggle('hidden',role!=='host'||!st.started||st.finished);
  $('next').disabled=!st.pairs.every(p=>p.done);
  $('next').textContent=st.round===st.scenarios-1?'Kết thúc trò chơi':'Tình huống tiếp theo';
+ $('publishFinal').classList.toggle('hidden',role!=='host'||!st.finished||st.finalRankingPublished);
 
  if(role==='team'&&st.started){
   $('game').classList.add('hidden');$('playerView').classList.remove('hidden');
@@ -73,8 +81,8 @@ function render(st){
   $('pairs').innerHTML='';$('myChoice').textContent='';$('finish').classList.add('hidden');return;
  }
  if(st.finished){
-  $('scenarioTitle').textContent='Đã hoàn thành 10 tình huống';
-  $('scenarioDesc').textContent='Bảng xếp hạng cuối cùng được hiển thị phía trên.';
+  $('scenarioTitle').textContent='Đã hoàn thành 20 lượt';
+  $('scenarioDesc').textContent=st.finalRankingPublished?'Bảng xếp hạng chính thức đã được công bố.':'Lần công bố 1: xếp theo điểm. Quản trò có thể công bố lần 2 để hiện bảng xếp hạng lòng vị tha.';
   $('pairs').innerHTML='';$('myChoice').textContent='';$('finish').classList.remove('hidden');return;
  }
  $('finish').classList.add('hidden');
@@ -99,7 +107,7 @@ function renderPlayerView(st){
  $('playerScoreline').innerHTML=st.teams.filter(t=>pair?pair.teams.includes(t.id):t.id===teamId).map(t=>'<div class="player-scorebox"><span>'+esc(t.name)+'</span><strong>'+t.score+' điểm</strong></div>').join('');
  if(st.finished){
   $('playerQuestion').textContent='Trò chơi kết thúc';
-  $('playerContext').textContent='Bạn đã hoàn thành 10 tình huống. Hãy nhìn lại những lựa chọn đã đưa ra và cách chúng tác động đến kết quả của cả hai bên.';
+  $('playerContext').textContent='Bạn đã hoàn thành 20 lượt. Hãy nhìn lại những lựa chọn giữa bạn và đối thủ.';
   $('playerStatus').innerHTML='<div class="player-result"><strong>Giữa lợi ích cá nhân và lợi ích cộng đồng</strong><p>Không ai khuyên bạn ngừng nghĩ cho bản thân hay từ bỏ quyền lợi chính đáng. Nhưng một xã hội công bằng không thể được xây dựng nếu mỗi người chỉ quan tâm đến lợi ích riêng mà bỏ qua những người xung quanh.</p><p>Chủ nghĩa xã hội hướng đến một xã hội vì nhân dân, do nhân dân làm chủ, trong đó lợi ích chính đáng của cá nhân gắn liền với lợi ích chung của cộng đồng.</p><p>Bước đầu tiên cho những thay đổi tích cực là vượt qua tư tưởng vị kỷ và biết ưu tiên lợi ích chung khi lợi ích ấy gắn với sự công bằng và hạnh phúc của mọi người.</p></div>';
   $('playerChoices').innerHTML='';return;
  }
@@ -110,7 +118,7 @@ function renderPlayerView(st){
   $('playerChoices').innerHTML='';return;
  }
  const opponentId=pair.teams.find(id=>id!==teamId),opponent=teamNames[opponentId],myChoice=pair.choices[teamId],locked=!!myChoice&&!pair.done;
- const historyMarkup=()=>{const people=pair.teams.map(id=>st.teams.find(t=>t.id===id)).filter(Boolean);return '<div class="player-history"><strong>Lịch sử lựa chọn các lượt trước</strong>'+people.map(person=>{const entries=(person.history||[]).filter(h=>h.round<st.round+1);return '<div class="history-person"><b>'+esc(person.name)+'</b>'+(entries.length?'<ul>'+entries.map(h=>'<li>Lượt '+h.round+' — '+esc(h.scenario)+': <strong>'+(h.choice==='common'?'Hợp tác':'Phản bội')+'</strong> ('+h.points+' điểm)</li>').join('')+'</ul>':'<p>Chưa có lịch sử ở các lượt trước.</p>')+'</div>'}).join('')+'</div>'};
+ const historyMarkup=()=>{const people=pair.teams.map(id=>st.teams.find(t=>t.id===id)).filter(Boolean);return '<div class="player-history"><strong>Lịch sử giữa hai người chơi trong cặp đấu này</strong>'+people.map(person=>{const otherId=pair.teams.find(id=>id!==person.id);const entries=(person.history||[]).filter(h=>h.opponentId===otherId&&h.round<st.round+1).sort((x,y)=>x.round-y.round);return '<div class="history-person"><b>'+esc(person.name)+' với '+esc(teamNames[otherId])+'</b>'+(entries.length?'<ul>'+entries.map(h=>'<li>Lượt '+h.round+' (lần gặp '+h.encounter+') — '+esc(h.scenario)+': <strong>'+(h.choice==='common'?'Hợp tác':'Phản bội')+'</strong> ('+h.points+' điểm)</li>').join('')+'</ul>':'<p>Hai người chưa có lượt gặp nhau nào trước đó.</p>')+'</div>'}).join('')+'</div>'};
  if(pair.done){
   $('playerStatus').innerHTML='<div class="player-result"><strong>Lượt đã hoàn tất.</strong><br>'+esc(teamNames[pair.teams[0]])+': '+(pair.choices[pair.teams[0]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[0]]+' điểm<br>'+esc(teamNames[pair.teams[1]])+': '+(pair.choices[pair.teams[1]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[1]]+' điểm</div>';
  }else if(locked){
