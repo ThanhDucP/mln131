@@ -69,11 +69,11 @@ function renderPlayerView(st){
  $('playerScoreline').innerHTML='<div class="player-scorebox"><span>'+esc(player.name)+'</span><strong>'+player.score+' điểm</strong></div>';
  if(st.finished){
   $('playerStatus').innerHTML='<div class="player-result"><strong>Trò chơi đã kết thúc.</strong><p>Xếp hạng chính thức ưu tiên số lần phản bội người tốt thấp nhất. Người tốt là người có tỷ lệ hợp tác từ 70% trở lên. Nếu tiêu chí và điểm bằng nhau, người chơi đồng hạng.</p></div>';
-  $('playerChoices').innerHTML='';$('playerHistory').innerHTML=historyMarkup(player,st);return;
+  $('playerChoices').innerHTML='';$('playerHistory').innerHTML=historyMarkup(player,'Lịch sử 5 lựa chọn gần nhất của bạn');return;
  }
  if(!pair){
   $('playerStatus').innerHTML='<strong>Bạn được nghỉ lượt này.</strong><p>Số người chơi lẻ nên mỗi lượt có thể có một người nghỉ. Lượt sau sẽ ghép cặp ngẫu nhiên lại.</p>';
-  $('playerChoices').innerHTML='';$('playerHistory').innerHTML=historyMarkup(player,st);return;
+  $('playerChoices').innerHTML='';$('playerHistory').innerHTML=historyMarkup(player,'Lịch sử 5 lựa chọn gần nhất của bạn');return;
  }
  const opponentId=pair.players.find(id=>id!==playerId),opponent=st.players.find(p=>p.id===opponentId),myChoice=pair.choices[playerId],locked=!!myChoice&&!pair.done;
  $('playerStatus').textContent=pair.done?'Lượt đã hoàn tất. '+opponent.name+': '+(pair.choices[opponentId]==='common'?'Hợp tác':'Phản bội')+' · '+pair.points[opponentId]+' điểm.':locked?'Bạn đã chốt lựa chọn. Đang chờ '+opponent.name+' chốt.':'Bạn đang đấu với '+opponent.name+'. Lựa chọn của hai bên được giữ kín đến khi cả hai chốt.';
@@ -82,9 +82,9 @@ function renderPlayerView(st){
   btn.disabled=true;$('playerNotice').textContent='Đang ghi nhận lựa chọn…';
   socket.emit('choose',{pairId:pair.id,choice:btn.dataset.choice},res=>{if(!res?.ok){$('playerNotice').textContent=res?.error||'Không thể gửi lựa chọn';renderPlayerView(state)}else $('playerNotice').textContent=''});
  });
- $('playerHistory').innerHTML=historyMarkup(player,st);
+ $('playerHistory').innerHTML=historyMarkup(opponent,'5 lựa chọn gần nhất của '+opponent.name);
 }
-function historyMarkup(player,st){
+function historyMarkup(player,title){
  const recent=[...(player?.history||[])].sort((a,b)=>b.round-a.round).slice(0,5);
- return '<section class="player-history"><h3>5 lần đối đầu gần nhất</h3>'+(recent.length?'<ol>'+recent.map(h=>'<li><strong>Lượt '+h.round+' · '+esc(h.opponent)+'</strong><div>Bạn: '+(h.choice==='common'?'Hợp tác':'Phản bội')+' ('+h.points+' điểm) · Đối thủ: '+(h.opponentChoice==='common'?'Hợp tác':'Phản bội')+'</div></li>').join('')+'</ol>':'<p>Chưa có lịch sử đối đầu.</p>')+'</section>';
+ return '<section class="player-history"><h3>'+esc(title||'5 lựa chọn gần nhất của đối thủ')+'</h3>'+(recent.length?'<ol>'+recent.map(h=>'<li><strong>Lượt '+h.round+' · Đối đầu với '+esc(h.opponent)+'</strong><div>Đã chọn: <strong>'+(h.choice==='common'?'Hợp tác':'Phản bội')+'</strong> · Điểm nhận: '+h.points+'</div></li>').join('')+'</ol>':'<p>Người chơi này chưa có lịch sử lựa chọn.</p>')+'</section>';
 }
