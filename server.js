@@ -162,7 +162,7 @@ io.on('connection', socket => {
     if (!room) return cb && cb({ ok: false, error: 'Không tìm thấy phòng. Kiểm tra mã phòng.' });
     if (room.finished) return cb && cb({ ok: false, error: 'Ván chơi đã kết thúc.' });
     
-    const playerName = String(name || '').trim().replace(/\\s+/g, ' ').slice(0, 30);
+    const playerName = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
     const r = room.started ? room.players.find(p=>!p.forfeited&&!p.socketId&&p.disconnectTimer&&p.name.toLocaleLowerCase('vi')===playerName.toLocaleLowerCase('vi')) : null;
     if(r){clearTimeout(r.disconnectTimer);r.disconnectTimer=null;r.socketId=socket.id;socket.data.roomCode=room.code;socket.data.playerId=r.id;socket.join(room.code);const m=[...room.activeMatches.values()].find(x=>x.players.includes(r.id));if(m&&m.pausedForDisconnect){m.pausedForDisconnect=false;m.endsAt=Date.now()+m.remainingMs;m.timer=setTimeout(()=>{if(m.done||room.finished)return;settleMatch(room,m,true);startAvailableMatches(room);emit(room);finishIfComplete(room);},m.remainingMs);}cb&&cb({ok:true,state:pub(room,r.id,false),playerId:r.id,reconnected:true});startAvailableMatches(room);emit(room);return;}
     if(room.started)return cb&&cb({ok:false,error:'Ván chơi đã bắt đầu. Chỉ người mất kết nối mới có thể quay lại bằng đúng tên cũ trong 30 giây.'});
