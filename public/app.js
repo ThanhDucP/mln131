@@ -110,6 +110,7 @@ function renderPlayerView(st){
   $('playerChoices').innerHTML='';return;
  }
  const opponentId=pair.teams.find(id=>id!==teamId),opponent=teamNames[opponentId],myChoice=pair.choices[teamId],locked=!!myChoice&&!pair.done;
+ const historyMarkup=()=>{const people=pair.teams.map(id=>st.teams.find(t=>t.id===id)).filter(Boolean);return '<div class="player-history"><strong>Lịch sử lựa chọn các lượt trước</strong>'+people.map(person=>{const entries=(person.history||[]).filter(h=>h.round<st.round+1);return '<div class="history-person"><b>'+esc(person.name)+'</b>'+(entries.length?'<ul>'+entries.map(h=>'<li>Lượt '+h.round+' — '+esc(h.scenario)+': <strong>'+(h.choice==='common'?'Hợp tác':'Phản bội')+'</strong> ('+h.points+' điểm)</li>').join('')+'</ul>':'<p>Chưa có lịch sử ở các lượt trước.</p>')+'</div>'}).join('')+'</div>'};
  if(pair.done){
   $('playerStatus').innerHTML='<div class="player-result"><strong>Lượt đã hoàn tất.</strong><br>'+esc(teamNames[pair.teams[0]])+': '+(pair.choices[pair.teams[0]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[0]]+' điểm<br>'+esc(teamNames[pair.teams[1]])+': '+(pair.choices[pair.teams[1]]==='common'?'Hợp tác':'Phản bội')+' · +'+pair.points[pair.teams[1]]+' điểm</div>';
  }else if(locked){
@@ -117,7 +118,8 @@ function renderPlayerView(st){
  }else{
   $('playerStatus').textContent='Bạn đang đối đầu với '+opponent+'. Hãy cân nhắc tình huống và chọn một phương án. Lựa chọn của hai bên được giữ kín cho đến khi cả hai chốt.';
  }
- $('playerChoices').innerHTML='<button class="player-choice '+(myChoice==='common'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="common">Hợp tác với đồng minh<small>'+esc(st.scenario[2])+'<br><br>Nhận '+st.basePoints+' điểm nếu cả hai cùng hợp tác.</small></button><button class="player-choice self '+(myChoice==='self'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="self">Phản bội để giữ lợi ích riêng<small>'+esc(st.scenario[3])+'<br><br>Nhận '+(st.basePoints*2)+' điểm nếu đối thủ hợp tác; nhận 0 điểm nếu cả hai chọn phương án này.</small></button>';
+ $('playerStatus').innerHTML += historyMarkup();
+ $('playerChoices').innerHTML='<button class="player-choice '+(myChoice==='common'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="common">Hợp tác<small>'+esc(st.scenario[2])+'<br><br>Nhận '+st.basePoints+' điểm nếu cả hai cùng hợp tác.</small></button><button class="player-choice self '+(myChoice==='self'?'selected':'')+'" '+(locked||pair.done?'disabled':'')+' data-player-choice="self">Phản bội<small>'+esc(st.scenario[3])+'<br><br>Nhận '+(st.basePoints*2)+' điểm nếu đối thủ hợp tác; nhận 0 điểm nếu cả hai chọn phương án này.</small></button>';
  document.querySelectorAll('[data-player-choice]').forEach(btn=>btn.onclick=()=>{
   btn.disabled=true;$('playerStatus').textContent='Đang ghi nhận lựa chọn của bạn…';
   socket.emit('choose',{pairId:pair.id,choice:btn.dataset.playerChoice},res=>{
