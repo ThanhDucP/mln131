@@ -41,9 +41,9 @@ function rankingData(room) {
   });
 }
 function matchForViewer(match, viewerId, isHost) {
-  const visibleChoices = match.done || isHost
+  const visibleChoices = match.done
     ? { ...match.choices }
-    : (Object.prototype.hasOwnProperty.call(match.choices, viewerId) ? { [viewerId]: match.choices[viewerId] } : {});
+    : (viewerId !== null && Object.prototype.hasOwnProperty.call(match.choices, viewerId) ? { [viewerId]: match.choices[viewerId] } : {});
   return {
     id: match.id,
     players: [...match.players],
