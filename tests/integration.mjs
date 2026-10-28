@@ -65,14 +65,14 @@ try {
   ));
   assert.ok(timedOutVisible.some(Boolean), 'a timed-out choice should appear in player history');
 
-  // A new participant must be appended to the room even after the game has started.
+  // A new participant must be rejected after the host starts the game.
   const latePlayer = await newSession();
   await latePlayer.locator('#roomCode').fill(code);
   await latePlayer.locator('#playerName').fill('Integration Dave');
   await latePlayer.locator('#join').click();
-  await latePlayer.locator('#playerView').waitFor({ state: 'visible' });
-  await waitFor(async () => (await host.locator('#teamList .team').count()) === 4, 'late joiner appended to live roster');
-  players.push(latePlayer);
+  await waitFor(async () => (await latePlayer.locator('#notice').innerText()).includes('đã bắt đầu'), 'late join rejected after game start');
+  assert.equal(await host.locator('#teamList .team').count(), 3, 'late join must not change the roster');
+  await latePlayer.close();
 
   // Submit choices from independent browser contexts; the first active pair is chosen nearly simultaneously.
   let firstConcurrentPair = false;
@@ -93,7 +93,7 @@ try {
     await clickActiveChoices();
     const label = await host.locator('#roundLabel').innerText();
     return label.includes('Đã kết thúc');
-  }, 'game to finish all 40 matches', 240_000);
+  }, 'game to finish all 30 matches', 240_000);
 
   const completedLabel = await host.locator('#roundLabel').innerText();
   assert.match(completedLabel, /Đã kết thúc/);
@@ -104,8 +104,8 @@ try {
     assert.ok(history.includes('Điểm nhận:'), 'completed history should contain settled score values');
   }
   const teamCards = host.locator('#teamList .team');
-  assert.equal(await teamCards.count(), 4);
-  for (let i = 0; i < 4; i++) {
+  assert.equal(await teamCards.count(), 3);
+  for (let i = 0; i < 3; i++) {
     assert.match(await teamCards.nth(i).innerText(), /20 \/ 20 trận/);
   }
 
@@ -113,10 +113,10 @@ try {
     result: 'PASS',
     baseURL,
     sessions: 5,
-    players: 4,
-    matchesCompleted: 40,
-    gamesPerPlayer: [20, 20, 20, 20],
-    checks: ['room creation, unbounded roster and late joining', 'pairing exposes choices to exactly two players', '30-second timeout settles a match', 'choices submitted from independent browser contexts', 'cooperative scoring/history rendered', 'game ends after 20 matches per player, including a late joiner']
+    players: 3,
+    matchesCompleted: 30,
+    gamesPerPlayer: [20, 20, 20],
+    checks: ['room creation, unbounded pre-start roster, late join rejection', 'pairing exposes choices to exactly two players', '30-second timeout settles a match', 'choices submitted from independent browser contexts', 'cooperative scoring/history rendered', 'game ends after 20 matches per player']
   }, null, 2));
 } catch (error) {
   console.error('INTEGRATION TEST FAILED:', error);
