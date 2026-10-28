@@ -29,7 +29,6 @@ async function waitFor(predicate, description, ms = 120_000) {
 
 try {
   const host = await newSession();
-  await host.locator('#playerCount').fill('3');
   await host.locator('#create').click();
   await host.locator('#hostCode').waitFor({ state: 'visible' });
   const code = (await host.locator('#hostCode').innerText()).trim();
@@ -66,6 +65,15 @@ try {
   ));
   assert.ok(timedOutVisible.some(Boolean), 'a timed-out choice should appear in player history');
 
+  // A new participant must be appended to the room even after the game has started.
+  const latePlayer = await newSession();
+  await latePlayer.locator('#roomCode').fill(code);
+  await latePlayer.locator('#playerName').fill('Integration Dave');
+  await latePlayer.locator('#join').click();
+  await latePlayer.locator('#playerView').waitFor({ state: 'visible' });
+  await waitFor(async () => (await host.locator('#teamList .team').count()) === 4, 'late joiner appended to live roster');
+  players.push(latePlayer);
+
   // Submit choices from independent browser contexts; the first active pair is chosen nearly simultaneously.
   let firstConcurrentPair = false;
   const clickActiveChoices = async () => Promise.all(players.map(async p => {
@@ -85,7 +93,7 @@ try {
     await clickActiveChoices();
     const label = await host.locator('#roundLabel').innerText();
     return label.includes('Đã kết thúc');
-  }, 'game to finish all 30 matches', 240_000);
+  }, 'game to finish all 40 matches', 240_000);
 
   const completedLabel = await host.locator('#roundLabel').innerText();
   assert.match(completedLabel, /Đã kết thúc/);
@@ -96,19 +104,19 @@ try {
     assert.ok(history.includes('Điểm nhận:'), 'completed history should contain settled score values');
   }
   const teamCards = host.locator('#teamList .team');
-  assert.equal(await teamCards.count(), 3);
-  for (let i = 0; i < 3; i++) {
+  assert.equal(await teamCards.count(), 4);
+  for (let i = 0; i < 4; i++) {
     assert.match(await teamCards.nth(i).innerText(), /20 \/ 20 trận/);
   }
 
   console.log(JSON.stringify({
     result: 'PASS',
     baseURL,
-    sessions: 4,
-    players: 3,
-    matchesCompleted: 30,
-    gamesPerPlayer: [20, 20, 20],
-    checks: ['room creation and joining', 'pairing exposes choices to exactly two players', '30-second timeout settles a match', 'choices submitted from independent browser contexts', 'cooperative scoring/history rendered', 'game ends after 20 matches per player']
+    sessions: 5,
+    players: 4,
+    matchesCompleted: 40,
+    gamesPerPlayer: [20, 20, 20, 20],
+    checks: ['room creation, unbounded roster and late joining', 'pairing exposes choices to exactly two players', '30-second timeout settles a match', 'choices submitted from independent browser contexts', 'cooperative scoring/history rendered', 'game ends after 20 matches per player, including a late joiner']
   }, null, 2));
 } catch (error) {
   console.error('INTEGRATION TEST FAILED:', error);
