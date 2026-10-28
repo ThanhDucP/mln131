@@ -158,6 +158,7 @@ io.on('connection', socket => {
     const playerName = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
     const r = room.started ? room.players.find(p=>!p.forfeited&&!p.socketId&&p.disconnectTimer&&p.name.toLocaleLowerCase('vi')===playerName.toLocaleLowerCase('vi')) : null;
     if(r){clearTimeout(r.disconnectTimer);r.disconnectTimer=null;r.socketId=socket.id;socket.data.roomCode=room.code;socket.data.playerId=r.id;socket.join(room.code);const m=[...room.activeMatches.values()].find(x=>x.players.includes(r.id));if(m&&m.pausedForDisconnect){m.pausedForDisconnect=false;m.endsAt=Date.now()+m.remainingMs;m.timer=setTimeout(()=>{if(m.done||room.finished)return;settleMatch(room,m,true);startAvailableMatches(room);emit(room);finishIfComplete(room);},m.remainingMs);}cb&&cb({ok:true,state:pub(room,r.id,false),playerId:r.id,reconnected:true});startAvailableMatches(room);emit(room);return;}
+    if (room.started) return cb && cb({ ok: false, error: 'Ván chơi đã bắt đầu. Không thể thêm người chơi mới; người chơi cũ có thể kết nối lại trong 30 giây bằng đúng tên.' });
     if (!playerName) return cb && cb({ ok: false, error: 'Nhập tên người chơi.' });
     if (room.players.some(p => p.name.toLocaleLowerCase('vi') === playerName.toLocaleLowerCase('vi'))) {
       return cb && cb({ ok: false, error: 'Tên này đã được sử dụng trong phòng. Hãy chọn tên khác.' });
