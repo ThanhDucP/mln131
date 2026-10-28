@@ -13,7 +13,6 @@ const GAMES_PER_PLAYER = 20;
 const ROUND_SECONDS = 30;
 const RECONNECT_GRACE_SECONDS = 30;
 const MIN_PLAYERS = 2;
-const MAX_PLAYERS = 50;
 const BASE_POINTS = [5, 5, 5, 5, 5, 5, 10, 10, 10, 10, 10, 10, 10, 10, 20, 20, 20, 20, 30, 30];
 const rooms = new Map();
 
@@ -129,16 +128,10 @@ function playerBySocket(room, socketId) {
 
 io.on('connection', socket => {
   socket.on('createRoom', (payload = {}, cb) => {
-    const count = Number(payload.playerCount);
-    if (!Number.isInteger(count) || count < MIN_PLAYERS || count > MAX_PLAYERS) {
-      return cb && cb({ ok: false, error: 'Số người chơi phải từ 2 đến ' + MAX_PLAYERS + '.' });
-    }
     const c = code();
     const room = {
       code: c, hostId: socket.id, hostConnected: true, started: false, finished: false,
-      finalRankingPublished: false, players: Array.from({ length: count }, (_, id) => ({
-        id, name: 'Người chơi ' + (id + 1), score: 0, socketId: null, history: [], gamesPlayed: 0
-      })),
+      finalRankingPublished: false, players: [],
       matches: [], matchQueue: [], activeMatches: new Map(), busyPlayers: new Set(), completedMatches: 0
     };
     rooms.set(c, room);
@@ -165,19 +158,22 @@ io.on('connection', socket => {
     const playerName = String(name || '').trim().replace(/\s+/g, ' ').slice(0, 30);
     const r = room.started ? room.players.find(p=>!p.forfeited&&!p.socketId&&p.disconnectTimer&&p.name.toLocaleLowerCase('vi')===playerName.toLocaleLowerCase('vi')) : null;
     if(r){clearTimeout(r.disconnectTimer);r.disconnectTimer=null;r.socketId=socket.id;socket.data.roomCode=room.code;socket.data.playerId=r.id;socket.join(room.code);const m=[...room.activeMatches.values()].find(x=>x.players.includes(r.id));if(m&&m.pausedForDisconnect){m.pausedForDisconnect=false;m.endsAt=Date.now()+m.remainingMs;m.timer=setTimeout(()=>{if(m.done||room.finished)return;settleMatch(room,m,true);startAvailableMatches(room);emit(room);finishIfComplete(room);},m.remainingMs);}cb&&cb({ok:true,state:pub(room,r.id,false),playerId:r.id,reconnected:true});startAvailableMatches(room);emit(room);return;}
-    if(room.started)return cb&&cb({ok:false,error:'Ván chơi đã bắt đầu. Chỉ người mất kết nối mới có thể quay lại bằng đúng tên cũ trong 30 giây.'});
     if (!playerName) return cb && cb({ ok: false, error: 'Nhập tên người chơi.' });
-    if (room.players.some(p => p.socketId && p.name.toLocaleLowerCase('vi') === playerName.toLocaleLowerCase('vi'))) {
+    if (room.players.some(p => p.name.toLocaleLowerCase('vi') === playerName.toLocaleLowerCase('vi'))) {
       return cb && cb({ ok: false, error: 'Tên này đã được sử dụng trong phòng. Hãy chọn tên khác.' });
     }
-    const player = room.players.find(p => !p.socketId || !io.sockets.sockets.has(p.socketId));
-    if (!player) return cb && cb({ ok: false, error: 'Phòng đã đủ người chơi.' });
-    player.name = playerName;
-    player.socketId = socket.id;
+    const id = room.players.reduce((max, p) => Math.max(max, p.id), -1) + 1;
+    const player = {
+      id, name: playerName, score: 0, socketId: socket.id, history: [],
+      gamesPlayed: 0, forfeited: false, disconnectTimer: null
+    };
+    if (room.started) player.remainingPoints = shuffle(BASE_POINTS);
+    room.players.push(player);
     socket.data.roomCode = room.code;
     socket.data.playerId = player.id;
     socket.join(room.code);
     cb && cb({ ok: true, state: pub(room, player.id, false), playerId: player.id });
+    if (room.started) startAvailableMatches(room);
     emit(room);
   });
 
