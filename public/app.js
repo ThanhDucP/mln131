@@ -15,8 +15,7 @@ function enterGame(r, st) {
   render(st);
 }
 $('create').onclick = () => {
-  const playerCount = Number($('playerCount').value);
-  socket.emit('createRoom', { playerCount }, res => {
+  socket.emit('createRoom', {}, res => {
     if (!res?.ok) return notice(res?.error || 'Không tạo được phòng.');
     $('hostCodeWrap').classList.remove('hidden'); $('hostCode').textContent = res.code;
     enterGame('host', res.state);
